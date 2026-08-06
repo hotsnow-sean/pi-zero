@@ -6,6 +6,7 @@ import {
 	type CompactStyleMode,
 } from "./compact-style.ts";
 import { showTextPreview } from "../shared/text-preview.ts";
+import type { CompactThinkingConfig, CompactThinkingController } from "./compact-thinking.ts";
 import {
 	installToolGrouping,
 	ToolGroupComponent,
@@ -41,16 +42,6 @@ import { inspect } from "node:util";
  * This is the package's only entry point. Compact transcript rendering lives in
  * the internal compact-style module and is routed by the mode below.
  */
-
-export type CompactThinkingConfig = {
-	useSummaryTitlesAsThinkingTitle: boolean;
-	previewLines: number;
-	animationIntervalMs: number;
-};
-
-export type CompactThinkingController = {
-	updateConfig(next: CompactThinkingConfig): void;
-};
 
 export type Config = {
 	mode: CompactStyleMode;

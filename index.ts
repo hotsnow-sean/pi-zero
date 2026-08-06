@@ -63,7 +63,8 @@ import {
 } from "./vibe/working-vibes.ts";
 import workingMessage from "./vibe/working-message.ts";
 import contextUsageExtension from "./context/context.ts";
-import claudeCodeStyle from "./ccstyle/claude-code-style.ts";
+import claudeCodeStyle, { getCompactThinkingConfig } from "./ccstyle/claude-code-style.ts";
+import { installCompactThinking, type CompactThinkingController } from "./ccstyle/compact-thinking.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
@@ -188,7 +189,14 @@ export default function piZero(pi: ExtensionAPI): void {
   // /context usage inspector (from pi-cc-extensions)
   contextUsageExtension(pi);
   // ccstyle: Claude Code style tool rendering (collapse / compact / animation / rich diff)
-  claudeCodeStyle(pi);
+  let compactThinking: CompactThinkingController | undefined;
+  const compactThinkingBridge: CompactThinkingController = {
+    updateConfig(next) {
+      compactThinking?.updateConfig(next);
+    },
+  };
+  claudeCodeStyle(pi, undefined, compactThinkingBridge);
+  compactThinking = installCompactThinking(pi, getCompactThinkingConfig());
 
   let powerlineEnabled = true;
   let currentCtx: any = null;
