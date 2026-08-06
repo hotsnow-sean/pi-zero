@@ -1,9 +1,10 @@
 {
-  "name": "pi-zero",
+  "name": "@zerosnow/pi-zero",
   "version": "0.1.0",
   "description": "Curated pi extension suite: powerline status bar + random vibe + token/elapsed-time stats, /context, and ccstyle tool rendering",
   "type": "module",
   "keywords": [
+    "pi-package",
     "pi-extension",
     "pi-coding-agent",
     "status-bar",
@@ -11,10 +12,28 @@
     "vibe"
   ],
   "license": "MIT",
+  "files": [
+    "index.ts",
+    "context/",
+    "powerline/",
+    "shared/",
+    "vibe/",
+    "ccstyle/",
+    "LICENSE",
+    "README.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "dependencies": {
     "jiti": "^2.7.0",
     "pi-compact-thinking": "^0.2.0"
   },
+  "bundledDependencies": [
+    "pi-compact-thinking"
+  ],
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",

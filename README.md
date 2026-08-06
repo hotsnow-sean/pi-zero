@@ -14,11 +14,10 @@ A curated pi extension suite that combines the best of `pi-powerline-footer` and
 
 ## Install
 
-`pi-zero` lives in Pi's auto-discovery directory, so no install command is needed:
+Install from npm as a pi package:
 
 ```bash
-# Global (default when PI_CODING_AGENT_DIR is unset)
-~/.pi/agent/extensions/pi-zero
+pi install npm:@zerosnow/pi-zero
 ```
 
 Then run `/reload` in the pi TUI.
@@ -44,15 +43,8 @@ Global config lives in `~/.pi/agent/settings.json`. `pi-zero` reads these keys:
 
 ## Runtime dependencies
 
-`compact-thinking` needs `jiti` and `pi-compact-thinking`, both declared in `dependencies`.
-On a fresh machine or after cloning, install them once:
-
-```bash
-cd ~/.pi/agent/extensions/pi-zero
-npm install --legacy-peer-deps --omit=peer
-```
-
-(`--legacy-peer-deps --omit=peer` avoids installing the `@earendil-works/*` peer deps, which pi itself provides.)
+`compact-thinking` needs `jiti` (regular dependency) and `pi-compact-thinking` (a pi package, shipped as a bundled dependency).
+When installed via `pi install npm:@zerosnow/pi-zero`, pi runs `npm install`, so both are installed automatically — no manual setup needed.
 
 ## Structure
 
