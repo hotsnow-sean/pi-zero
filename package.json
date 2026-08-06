@@ -11,6 +11,10 @@
     "vibe"
   ],
   "license": "MIT",
+  "dependencies": {
+    "jiti": "^2.7.0",
+    "pi-compact-thinking": "^0.2.0"
+  },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",

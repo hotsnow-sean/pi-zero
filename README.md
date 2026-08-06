@@ -44,14 +44,15 @@ Global config lives in `~/.pi/agent/settings.json`. `pi-zero` reads these keys:
 
 ## Runtime dependencies
 
-`compact-thinking` needs two packages that live in pi's npm module dir. pi-zero resolves them via local symlinks in `node_modules/` (git-ignored). If they are missing, re-run:
+`compact-thinking` needs `jiti` and `pi-compact-thinking`, both declared in `dependencies`.
+On a fresh machine or after cloning, install them once:
 
 ```bash
 cd ~/.pi/agent/extensions/pi-zero
-mkdir -p node_modules
-ln -sfn ~/.pi/agent/npm/node_modules/jiti node_modules/jiti
-ln -sfn ~/.pi/agent/npm/node_modules/pi-compact-thinking node_modules/pi-compact-thinking
+npm install --legacy-peer-deps --omit=peer
 ```
+
+(`--legacy-peer-deps --omit=peer` avoids installing the `@earendil-works/*` peer deps, which pi itself provides.)
 
 ## Structure
 
