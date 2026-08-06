@@ -1,0 +1,22 @@
+{
+  "name": "pi-zero",
+  "version": "0.1.0",
+  "description": "零语的专属精简扩展：powerline 状态栏 + 随机 vibe + cc 的 token/耗时统计",
+  "type": "module",
+  "keywords": [
+    "pi-extension",
+    "pi-coding-agent",
+    "status-bar",
+    "powerline",
+    "vibe"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}
