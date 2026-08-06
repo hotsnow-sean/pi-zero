@@ -103,7 +103,14 @@ export async function executeWriteWithMetadata(
 						text: `Successfully wrote ${params.content.length} bytes to ${params.path}`,
 					},
 				],
-				details: undefined,
+				// Persist diff data in the result so a restored session can still render
+				// the write diff even though the in-memory metadata store is gone.
+				details: {
+					filePath: params.path,
+					fileExistedBeforeWrite: metadata.fileExistedBeforeWrite,
+					previousContent: metadata.previousContent,
+					diffUnavailableReason: metadata.diffUnavailableReason,
+				},
 			};
 		});
 	} catch (error) {

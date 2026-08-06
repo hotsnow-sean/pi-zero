@@ -60,7 +60,11 @@ export function renderRichToolResult(
 	}
 	if (toolName !== "write") return undefined;
 
-	const metadata = writeMetadata.get(context?.toolCallId);
+	// In-memory store for the live session; fall back to persisted result.details
+	// for a restored/old write call (in-memory store is gone after a restart).
+	const metadata =
+		writeMetadata.get(context?.toolCallId) ??
+		(typeof result?.details === "object" && result?.details !== null ? result.details : undefined);
 	if (!metadata) {
 		return unavailableComponent("execution metadata is unavailable", theme);
 	}
