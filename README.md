@@ -32,7 +32,7 @@ Then run `/reload` in the pi TUI.
 | `/context` | Show context-window distribution; press Enter/click to preview parts |
 | `/ccstyle [on\|off\|compact\|status\|panel]` | Switch or configure Claude Code style tool rendering |
 | `/vibe [theme\|off\|mode\|model\|generate]` | Configure the working-message vibe |
-| `/powerline [preset\|placement]` | Configure the status bar preset / placement |
+| `/powerline [on\|off\|preset\|placement]` | Toggle the status bar on/off, or set its preset / placement |
 
 ## Configuration
 

@@ -190,6 +190,7 @@ export default function piZero(pi: ExtensionAPI): void {
   // ccstyle: Claude Code style tool rendering (collapse / compact / animation / rich diff)
   claudeCodeStyle(pi);
 
+  let powerlineEnabled = true;
   let currentCtx: any = null;
   let footerDataRef: ReadonlyFooterDataProvider | null = null;
   let tuiRef: any = null;
@@ -427,6 +428,17 @@ export default function piZero(pi: ExtensionAPI): void {
     });
   }
 
+  function teardownStatusBar(ctx: any): void {
+    if (!ctx?.ui) return;
+    ctx.ui.setWidget("powerline-status", undefined);
+    ctx.ui.setWidget("powerline-top", undefined);
+    ctx.ui.setWidget("powerline-secondary", undefined);
+    ctx.ui.setFooter(undefined);
+    footerDataRef = null;
+    tuiRef = null;
+    resetLayoutCache();
+  }
+
   // ── Events ──
 
   pi.on("session_start", async (_event, ctx) => {
@@ -439,11 +451,12 @@ export default function piZero(pi: ExtensionAPI): void {
     delete (globalThis as any)[Symbol.for("pi.zero.vibe")];
 
     config = parsePowerlineConfig(readSettings(ctx.cwd).powerline, PRESET_NAMES);
+    powerlineEnabled = readPowerlineEnabled(ctx.cwd);
     getThinkingLevelFn = () => ctx.thinkingLevel ?? "off";
     currentThinkingLevel = getThinkingLevelFn();
     initVibeManager(ctx);
 
-    if (ctx.hasUI) {
+    if (ctx.hasUI && powerlineEnabled) {
       installStatusBar(ctx);
       setupFooter(ctx);
     }
@@ -665,13 +678,35 @@ export default function piZero(pi: ExtensionAPI): void {
 
       if (!args?.trim()) {
         ctx.ui.notify(
-          `Powerline: preset=${config.preset} | placement=${config.placement} | presets: ${Object.keys(PRESETS).join(", ")}`,
+          `Powerline: ${powerlineEnabled ? "on" : "off"} | preset=${config.preset} | placement=${config.placement} | presets: ${Object.keys(PRESETS).join(", ")}`,
           "info",
         );
         return;
       }
 
       const normalizedArgs = args.trim().toLowerCase();
+
+      // /powerline on|off — toggle the status bar
+      if (normalizedArgs === "on" || normalizedArgs === "off") {
+        const enable = normalizedArgs === "on";
+        powerlineEnabled = enable;
+        if (ctx.hasUI) {
+          if (enable) {
+            installStatusBar(ctx);
+            setupFooter(ctx);
+            requestImmediateStatusRender();
+          } else {
+            teardownStatusBar(ctx);
+          }
+        }
+        if (writePowerlineEnabled(ctx.cwd, enable)) {
+          ctx.ui.notify(`Powerline ${enable ? "enabled" : "disabled"}`, "info");
+        } else {
+          ctx.ui.notify(`Powerline ${enable ? "enabled" : "disabled"} (not persisted; check settings.json)`, "warning");
+        }
+        return;
+      }
+
       const placementMatch = /^placement(?:\s+(above|below|toggle))?$/.exec(normalizedArgs);
       if (placementMatch) {
         const requested = placementMatch[1];
@@ -760,6 +795,20 @@ function writePowerlineSetting(cwd: string, update: (existing: unknown) => unkno
   } catch {
     return false;
   }
+}
+
+/** Read the powerline status bar toggle from settings (default on). */
+function readPowerlineEnabled(cwd: string): boolean {
+  const pl = readSettings(cwd).powerline;
+  return pl && typeof pl === "object" && !Array.isArray(pl) ? (pl as { enabled?: unknown }).enabled !== false : true;
+}
+
+function writePowerlineEnabled(cwd: string, enabled: boolean): boolean {
+  return writePowerlineSetting(cwd, (existing) => {
+    const base =
+      existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+    return { ...(base as Record<string, unknown>), enabled };
+  });
 }
 
 function normalizePresetValue(value: string): StatusLinePreset | null {
