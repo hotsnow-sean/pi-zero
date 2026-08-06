@@ -63,6 +63,7 @@ import {
 } from "./working-vibes.ts";
 import workingMessage from "./working-message.ts";
 import contextUsageExtension from "./context.ts";
+import claudeCodeStyle from "./claude-code-style.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
@@ -186,6 +187,8 @@ export default function piZero(pi: ExtensionAPI): void {
   workingMessage(pi);
   // /context 上下文检查（来自 pi-cc-extensions）
   contextUsageExtension(pi);
+  // ccstyle：Claude Code 风格工具显示 + 折叠/compact/动画 + rich diff
+  claudeCodeStyle(pi);
 
   let currentCtx: any = null;
   let footerDataRef: ReadonlyFooterDataProvider | null = null;
