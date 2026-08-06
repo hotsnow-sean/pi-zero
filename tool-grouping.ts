@@ -311,7 +311,7 @@ export class ToolGroupComponent extends Container {
 		if (overall === "pending") scheduleGroupAnimation(this.patch);
 		const overallColor = overall === "pending" ? "accent" : overall;
 		const nameList = names.size > 1 ? ` ${fg("dim", `• ${toolNameList(this.children)}`)}` : "";
-		const hint = fg(this.hintHovered ? "text" : "dim", "• click to show more");
+		const hint = fg(this.hintHovered ? "text" : "dim", "• press ctrl-o to expand");
 		const lines = [
 			"",
 			truncateToWidth(

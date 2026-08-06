@@ -1250,7 +1250,7 @@ function rememberIoView(context: any, view: ExpandedToolIoView): void {
 
 function collapsedHintHitbox(line: string): { startCol: number; endCol: number } | null {
 	const plain = stripTerminalSequencesPreservingLayout(line);
-	const match = /(\([^()\n]* \/ click\)|click to show more)(?=\)?\s*$)/.exec(plain);
+	const match = /(\([^()\n]* \/ click\)|press ctrl-o to expand)(?=\)?\s*$)/.exec(plain);
 	if (!match?.[1]) return null;
 	const startCol = visibleWidth(plain.slice(0, match.index)) + 1;
 	return { startCol, endCol: startCol + visibleWidth(match[1]) - 1 };
@@ -2585,8 +2585,8 @@ function createCcstyleTool(
 						? `${outputLines} ${lineWord} ${action}`
 						: "Done";
 			const expandable = !expanded && (tasks.length > 0 || hasExpandableDetail(text, args));
-			const hint = expandable ? theme.fg("muted", " • click to show more") : "";
-			const hoveredHint = expandable ? theme.fg("text", " • click to show more") : "";
+			const hint = expandable ? theme.fg("muted", " • press ctrl-o to expand") : "";
+			const hoveredHint = expandable ? theme.fg("text", " • press ctrl-o to expand") : "";
 			if (expanded) {
 				return renderExpandedToolResult(
 					text || "",
