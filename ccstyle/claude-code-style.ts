@@ -2637,7 +2637,7 @@ const AGENT_FAMILY_TOOL_NAMES = new Set([
 	"get_subagent_result",
 	"steer_subagent",
 ]);
-// pi-subagents 等扩展为 Agent 提供专用渲染器（displayName/运行统计），ccstyle 必须保留，不能 wrap。
+// Extensions like pi-subagents provide dedicated renderers for the Agent tool (displayName / run stats); ccstyle preserves them without wrapping.
 const DEDICATED_RENDERER_TOOLS = new Set(["Agent"]);
 
 type ToolRenderMethods = {

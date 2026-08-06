@@ -1,7 +1,7 @@
 {
   "name": "pi-zero",
   "version": "0.1.0",
-  "description": "零语的专属精简扩展：powerline 状态栏 + 随机 vibe + cc 的 token/耗时统计",
+  "description": "Curated pi extension suite: powerline status bar + random vibe + token/elapsed-time stats, /context, and ccstyle tool rendering",
   "type": "module",
   "keywords": [
     "pi-extension",

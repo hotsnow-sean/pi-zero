@@ -1,10 +1,10 @@
 /**
- * pi-zero — 零语的专属精简扩展
+ * pi-zero — a curated pi extension suite
  *
- * 从 pi-powerline-footer 抽取：powerline 状态栏 + 随机 vibe 文案
- * 从 pi-cc-extensions 抽取：token + 耗时统计（并桥接合并到 vibe 上）
+ * Extracted from pi-powerline-footer: powerline status bar + random vibe messages
+ * Extracted from pi-cc-extensions: token + elapsed-time stats (bridged into the vibe)
  *
- * 剥离了 bash 模式、队列、stash、快捷键、欢迎页、git/货币命令等杂项。
+ * Stripped of bash mode, queue, stash, shortcuts, welcome page, git/currency commands.
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -84,7 +84,7 @@ let config: PowerlineConfig = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// 顶层渲染辅助（从 powerline index.ts 复制）
+// Top-level rendering helpers (copied from powerline index.ts)
 // ═══════════════════════════════════════════════════════════════════════
 
 function renderSegmentWithWidth(
@@ -179,15 +179,15 @@ function getUsageTokenTotal(usage: any): number {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 扩展主体
+// Extension body
 // ═══════════════════════════════════════════════════════════════════════
 
 export default function piZero(pi: ExtensionAPI): void {
-  // 先注册 cc 的 working-message（token/耗时 + vibe 桥接），确保它先 patch ui
+  // Register cc's working-message first (token/time + vibe bridge) so it patches ui before anything else
   workingMessage(pi);
-  // /context 上下文检查（来自 pi-cc-extensions）
+  // /context usage inspector (from pi-cc-extensions)
   contextUsageExtension(pi);
-  // ccstyle：Claude Code 风格工具显示 + 折叠/compact/动画 + rich diff
+  // ccstyle: Claude Code style tool rendering (collapse / compact / animation / rich diff)
   claudeCodeStyle(pi);
 
   let currentCtx: any = null;
@@ -246,7 +246,7 @@ export default function piZero(pi: ExtensionAPI): void {
     statusRenderScheduler.schedule(0);
   };
 
-  // ── 状态栏构建（从 powerline 简化：去掉 queue/shell 相关） ──
+  // ── Status bar construction (simplified from powerline: no queue/shell) ──
 
   function buildSegmentContext(ctx: any, theme: Theme): SegmentContext {
     const presetDef = getPreset(config.preset);
@@ -427,7 +427,7 @@ export default function piZero(pi: ExtensionAPI): void {
     });
   }
 
-  // ── 事件 ──
+  // ── Events ──
 
   pi.on("session_start", async (_event, ctx) => {
     sessionGeneration++;

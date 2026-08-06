@@ -1,8 +1,8 @@
 /**
  * shared/text-preview.ts
  *
- * 通用文本预览对话框（showTextPreview），以及配套的文本/鼠标工具函数。
- * 被 context（/context 内容预览）与 ccstyle（工具输入/输出 [show more]）共用。
+ * Generic text-preview dialog (showTextPreview) plus its text/mouse helpers.
+ * Shared by context (/context content preview) and ccstyle (tool Input/Output [show more]).
  */
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
