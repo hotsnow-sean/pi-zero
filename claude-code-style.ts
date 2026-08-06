@@ -5,7 +5,6 @@ import {
 	type CompactStyleHooks,
 	type CompactStyleMode,
 } from "./compact-style.ts";
-import type { CompactThinkingConfig, CompactThinkingController } from "./compact-thinking.ts";
 import { showTextPreview } from "./context.ts";
 import {
 	installToolGrouping,
@@ -42,6 +41,16 @@ import { inspect } from "node:util";
  * This is the package's only entry point. Compact transcript rendering lives in
  * the internal compact-style module and is routed by the mode below.
  */
+
+export type CompactThinkingConfig = {
+	useSummaryTitlesAsThinkingTitle: boolean;
+	previewLines: number;
+	animationIntervalMs: number;
+};
+
+export type CompactThinkingController = {
+	updateConfig(next: CompactThinkingConfig): void;
+};
 
 export type Config = {
 	mode: CompactStyleMode;
@@ -976,12 +985,9 @@ const ZENTUI_PAGE_UP_INPUT = /^\x1b\[5;9(?::[12])?~$|^\x1b\[57421;9(?::[12])?u$|
 const ZENTUI_PAGE_DOWN_INPUT = /^\x1b\[6;9(?::[12])?~$|^\x1b\[57422;9(?::[12])?u$|^\x1b\[1;6B$/;
 const SCROLL_BOTTOM_SHORTCUT = "ctrl+end";
 const ZENTUI_WHEEL_ROWS = 3;
-const FIXED_EDITOR_WHEEL_ROWS = 5;
 let toolMouseTui: any = null;
 let toolMouseUi: any = null;
 let toolMouseFixedFeaturesEnabled = false;
-let wheelExtraRowRemainder = 0;
-let lastWheelDirection: "up" | "down" | null = null;
 let collapseCompensationRemainder = 0;
 let toolMouseInputUnsubscribe: (() => void) | null = null;
 let toolMouseInputPatchTui: any = null;
@@ -1127,29 +1133,6 @@ function isScrollBottomInput(data: string): boolean {
 	return matchesKey(data, SCROLL_BOTTOM_SHORTCUT);
 }
 
-function wheelDirection(data: string): "up" | "down" | null {
-	const packets = parseSgrMousePackets(data);
-	for (const packet of packets ?? []) {
-		if (packet.final !== "M") continue;
-		const baseButton = packet.code & ~(4 | 8 | 16 | 32);
-		if (baseButton === 64) return "up";
-		if (baseButton === 65) return "down";
-	}
-	return null;
-}
-
-/** Return how often Zentui's 3-row wheel handler should receive this event. */
-export function fixedEditorWheelDispatchCount(direction: "up" | "down"): number {
-	if (lastWheelDirection !== direction) {
-		lastWheelDirection = direction;
-		wheelExtraRowRemainder = 0;
-	}
-	wheelExtraRowRemainder += FIXED_EDITOR_WHEEL_ROWS - ZENTUI_WHEEL_ROWS;
-	if (wheelExtraRowRemainder < ZENTUI_WHEEL_ROWS) return 1;
-	wheelExtraRowRemainder -= ZENTUI_WHEEL_ROWS;
-	return 2;
-}
-
 function isScrollNavigationInput(data: string): boolean {
 	if (
 		matchesKey(data, "pageUp") ||
@@ -1166,66 +1149,6 @@ function isScrollNavigationInput(data: string): boolean {
 			return packet.final === "M" && (baseButton === 64 || baseButton === 65);
 		}),
 	);
-}
-
-function directRenderLines(component: any, width: number): string[] {
-	try {
-		const lines = component?.render?.(width);
-		return Array.isArray(lines) ? lines : [];
-	} catch {
-		return [];
-	}
-}
-
-/** Index just before the fixed editor cluster in the TUI child list. */
-function fixedScrollableRootEnd(tui: any): number {
-	const children = Array.isArray(tui?.children) ? tui.children : [];
-	const editorIndex = children.findIndex((child: any) =>
-		containsEditorLike(child, tui.focusedComponent),
-	);
-	return editorIndex >= 2 ? editorIndex - 2 : children.length;
-}
-
-/**
- * Last N stripped lines of the scrollable root (after trimming trailing blanks).
- * Walks children backwards and stops once the tail is fully determined, so long
- * transcripts with many sibling nodes do not re-render the whole tree on scroll.
- */
-function renderFixedScrollableRootTail(tui: any, width: number, matchLength: number): string[] {
-	const children = Array.isArray(tui?.children) ? tui.children : [];
-	const end = fixedScrollableRootEnd(tui);
-	const collected: string[] = [];
-	for (let index = end - 1; index >= 0; index--) {
-		const lines = directRenderLines(children[index], width).map((line) =>
-			stripTerminalSequences(String(line)),
-		);
-		collected.unshift(...lines);
-		let meaningful = collected.length;
-		while (meaningful > 0 && collected[meaningful - 1] === "") meaningful--;
-		if (meaningful >= matchLength) break;
-	}
-	while (collected.length > 0 && collected[collected.length - 1] === "") collected.pop();
-	if (collected.length === 0) return [];
-	return collected.slice(-Math.min(matchLength, collected.length));
-}
-
-function isFixedEditorAtBottom(tui: any): boolean {
-	if (!useFixedEditorFeatures(tui)) return true;
-	const visibleLines = Array.isArray(tui?.previousLines) ? tui.previousLines : [];
-	if (visibleLines.length === 0) return true;
-	const width = Math.max(1, Number(tui?.terminal?.columns) || 80);
-	const expected = renderFixedScrollableRootTail(tui, width, 3);
-	if (expected.length === 0) return true;
-
-	// previousLines contains both the scrollable root and Zentui's fixed cluster.
-	// Locate the root tail within that full frame instead of requiring it to be
-	// the frame suffix; otherwise status/editor/footer rows keep the button alive.
-	const visible = visibleLines.map((line: unknown) => stripTerminalSequences(String(line)));
-	const matchLength = expected.length;
-	for (let end = matchLength; end <= visible.length; end++) {
-		if (expected.every((line, index) => line === visible[end - matchLength + index])) return true;
-	}
-	return false;
 }
 
 function hideScrollButton(tui: any): void {
@@ -1260,7 +1183,7 @@ function scheduleScrollButtonSync(tui: any, data: string): void {
 			}
 			return;
 		}
-		const nextVisible = !isFixedEditorAtBottom(tui);
+		const nextVisible = false;
 		if (!nextVisible) pendingScrollMessages = 0;
 		if (nextVisible !== scrollButtonVisible) {
 			scrollButtonVisible = nextVisible;
@@ -1287,47 +1210,10 @@ function renderComponentTree(component: any, width: number): string[] {
 	return component.children.flatMap((child: any) => renderComponentTree(child, width));
 }
 
-function containsEditorLike(component: any, focused: any, seen = new Set<any>()): boolean {
-	if (!component || typeof component !== "object" || seen.has(component)) return false;
-	seen.add(component);
-	if (component === focused) return true;
-	if (
-		typeof component.getText === "function" &&
-		typeof component.setText === "function" &&
-		typeof component.handleInput === "function"
-	)
-		return true;
-	return (
-		Array.isArray(component.children) &&
-		component.children.some((child: any) => containsEditorLike(child, focused, seen))
-	);
-}
 
-function isScrollButtonAtScreenRow(_tui: any, packet: SgrMousePacket): boolean {
-	return interactionRegionAt(packet)?.kind === "scroll-bottom";
-}
-
-function jumpToBottomWithoutSubmit(tui: any): boolean {
-	const originalHandle = toolMouseInputPatchTui === tui ? toolMouseInputPatchOriginalHandle : null;
-	if (!originalHandle) return false;
-
-	// Route Enter through Pi's normal listener chain so pi-zentui can update its
-	// private scroll offset, but suppress the focused editor for this synthetic
-	// dispatch so clicking the button never submits the current input.
-	const focused = tui.focusedComponent;
-	try {
-		tui.focusedComponent = null;
-		Reflect.apply(originalHandle, tui, ["\r"]);
-	} finally {
-		tui.focusedComponent = focused;
-	}
-	hideScrollButton(tui);
-	return true;
-}
-
-function handleScrollButtonClick(tui: any, packet: SgrMousePacket): boolean {
-	if (!isScrollButtonAtScreenRow(tui, packet)) return false;
-	return jumpToBottomWithoutSubmit(tui);
+function handleScrollButtonClick(_tui: any, _packet: SgrMousePacket): boolean {
+	// Scroll button is only reachable with the (unsupported) fixed editor; always inactive.
+	return false;
 }
 
 function scheduleCollapseViewportCompensation(
@@ -1447,7 +1333,7 @@ function updateToolSummaryHover(tui: any, packet: SgrMousePacket): void {
 function toggleToolAtMouseClick(tui: any, packet: SgrMousePacket): boolean {
 	const region = interactionRegionAt(packet);
 	if (!region) return false;
-	if (region.kind === "scroll-bottom") return jumpToBottomWithoutSubmit(tui);
+	if (region.kind === "scroll-bottom") return false;
 	if (region.kind === "show-more") return tryOpenToolIoShowMore(region);
 	const component = region.component;
 	if (!component) return false;
@@ -1507,12 +1393,6 @@ function patchToolMouseInputCapture(tui: any): void {
 			updateScrollButtonFromInput(this, data);
 			// Capture the current viewport before Pi/Zentui applies the scroll input.
 			scheduleScrollButtonSync(this, data);
-			if (
-				useFixedEditorFeatures(this) &&
-				isScrollBottomInput(data) &&
-				jumpToBottomWithoutSubmit(this)
-			)
-				return;
 			const packets = parseSgrMousePackets(data);
 			if (packets && toolMouseInteractionActive()) {
 				for (const packet of packets) {
@@ -1524,13 +1404,7 @@ function patchToolMouseInputCapture(tui: any): void {
 				}
 			}
 		}
-		const direction =
-			typeof data === "string" && useFixedEditorFeatures(this) ? wheelDirection(data) : null;
-		const dispatchCount = direction ? fixedEditorWheelDispatchCount(direction) : 1;
 		let result = Reflect.apply(originalHandle, this, args);
-		for (let index = 1; index < dispatchCount; index++) {
-			result = Reflect.apply(originalHandle, this, args);
-		}
 		if (typeof data === "string") scheduleScrollButtonSync(this, data);
 		return result;
 	};
@@ -1840,9 +1714,6 @@ function handleToolMouseInput(data: string): { consume: true } | undefined {
 		return undefined;
 	updateScrollButtonFromInput(toolMouseTui, data);
 	if (isScrollBottomInput(data)) {
-		if (useFixedEditorFeatures(toolMouseTui) && jumpToBottomWithoutSubmit(toolMouseTui)) {
-			return { consume: true };
-		}
 		if (!toolMouseFixedFeaturesEnabled) {
 			// Native Pi scrolls through terminal history rather than an internal
 			// viewport. A harmless terminal write makes Ctrl+End snap that history
@@ -1912,8 +1783,6 @@ function teardownToolMouseInteraction(nextFixedEditorFeatures = false): void {
 	toolMouseTui = null;
 	toolMouseUi = null;
 	toolMouseFixedFeaturesEnabled = false;
-	wheelExtraRowRemainder = 0;
-	lastWheelDirection = null;
 	collapseCompensationRemainder = 0;
 }
 
