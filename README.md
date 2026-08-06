@@ -9,7 +9,7 @@ A curated pi extension suite that combines the best of `pi-powerline-footer` and
 | **powerline** | Powerline-style status bar (git branch, token usage, model, context %) | automatic |
 | **vibe** | Random themed working-message (file or generate mode), merged with token / elapsed-time stats | automatic |
 | **context** | Context-window usage inspector with System Prompt / Tools / Skills preview | `/context` |
-| **ccstyle** | Claude Code style tool rendering (collapse / compact / animation / rich diff) | `/ccstyle` |
+| **ccstyle** | Claude Code style tool rendering (collapse / compact / animation / rich diff) + compact thinking | `/ccstyle` |
 | **shared** | Generic helpers (`getAgentPath`, `showTextPreview`) shared across modules | — |
 
 ## Install
@@ -41,6 +41,17 @@ Global config lives in `~/.pi/agent/settings.json`. `pi-zero` reads these keys:
 - `workingVibe`, `workingVibeMode`, `workingVibeModel` — vibe theme, mode (`file`/`generate`), model
 - `powerline` — status bar `preset`, `placement`, `disabledSegments`, `customItems`, etc.
 - `workingVibeShimmer` — shimmer sweep animation (handled by a separate local extension)
+
+## Runtime dependencies
+
+`compact-thinking` needs two packages that live in pi's npm module dir. pi-zero resolves them via local symlinks in `node_modules/` (git-ignored). If they are missing, re-run:
+
+```bash
+cd ~/.pi/agent/extensions/pi-zero
+mkdir -p node_modules
+ln -sfn ~/.pi/agent/npm/node_modules/jiti node_modules/jiti
+ln -sfn ~/.pi/agent/npm/node_modules/pi-compact-thinking node_modules/pi-compact-thinking
+```
 
 ## Structure
 
