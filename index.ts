@@ -62,6 +62,7 @@ import {
   generateVibesBatch,
 } from "./working-vibes.ts";
 import workingMessage from "./working-message.ts";
+import contextUsageExtension from "./context.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 
@@ -183,6 +184,8 @@ function getUsageTokenTotal(usage: any): number {
 export default function piZero(pi: ExtensionAPI): void {
   // 先注册 cc 的 working-message（token/耗时 + vibe 桥接），确保它先 patch ui
   workingMessage(pi);
+  // /context 上下文检查（来自 pi-cc-extensions）
+  contextUsageExtension(pi);
 
   let currentCtx: any = null;
   let footerDataRef: ReadonlyFooterDataProvider | null = null;
