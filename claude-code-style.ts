@@ -8,13 +8,6 @@ import {
 import type { CompactThinkingConfig, CompactThinkingController } from "./compact-thinking.ts";
 import { showTextPreview } from "./context.ts";
 import {
-	getFixedEditorScrollButtonHitbox,
-	getFixedEditorViewport,
-	installFixedEditor,
-	setBeforeFixedEditorStart,
-	type FixedEditorController,
-} from "./fixed-editor.ts";
-import {
 	installToolGrouping,
 	ToolGroupComponent,
 	type ToolGroupingHooks,
@@ -53,7 +46,6 @@ import { inspect } from "node:util";
 export type Config = {
 	mode: CompactStyleMode;
 	excludeRenderers: string[];
-	fixedEditorFeatures: boolean;
 	diffViewMode: DiffViewMode;
 	diffIndicatorMode: DiffIndicatorMode;
 	diffSplitMinWidth: number;
@@ -92,7 +84,6 @@ const EXCLUDE_RENDERER_CANDIDATES = [
 export const DEFAULT_CONFIG: Config = {
 	mode: "on",
 	excludeRenderers: [],
-	fixedEditorFeatures: false,
 	diffViewMode: DEFAULT_TOOL_DISPLAY_CONFIG.diffViewMode,
 	diffIndicatorMode: DEFAULT_TOOL_DISPLAY_CONFIG.diffIndicatorMode,
 	diffSplitMinWidth: DEFAULT_TOOL_DISPLAY_CONFIG.diffSplitMinWidth,
@@ -157,11 +148,9 @@ export function normalizeConfig(input: unknown): Config {
 				),
 			]
 		: [];
-	const fixedEditorFeatures = source.fixedEditorFeatures !== false;
 	return {
 		mode: migratedMode,
 		excludeRenderers,
-		fixedEditorFeatures,
 		diffViewMode: pickEnum(source.diffViewMode, DIFF_VIEW_MODES, DEFAULT_CONFIG.diffViewMode),
 		diffIndicatorMode: pickEnum(
 			source.diffIndicatorMode,
@@ -227,7 +216,6 @@ function formatExcludeRenderers(names: readonly string[]): string {
 export function formatConfigStatus(source: Config = config): string {
 	return [
 		`mode=${source.mode}`,
-		`fixedEditor=${source.fixedEditorFeatures ? "on" : "off"}`,
 		`exclude=[${source.excludeRenderers.join(", ") || "none"}]`,
 		`diffView=${source.diffViewMode}`,
 		`diffIndicator=${source.diffIndicatorMode}`,
@@ -1113,17 +1101,10 @@ function extractToolFramePlacements(
 /** Summary markers used by Pi and ccstyle; unlike the trailing hint, these survive truncation. */
 const COLLAPSED_TOOL_SUMMARY = /^\s*(?:↳|└|⎿|●|✓|✗|…)/;
 
-function isFixedEditorTui(tui: any): boolean {
-	const terminal = tui?.terminal;
-	if (!terminal) return false;
-	const ownRows = Object.getOwnPropertyDescriptor(terminal, "rows");
-	const prototype = Object.getPrototypeOf(terminal);
-	const inheritedRows = prototype ? Object.getOwnPropertyDescriptor(prototype, "rows") : undefined;
-	return typeof ownRows?.get === "function" && ownRows.get !== inheritedRows?.get;
-}
-
-function useFixedEditorFeatures(tui: any): boolean {
-	return toolMouseFixedFeaturesEnabled && isFixedEditorTui(tui);
+function useFixedEditorFeatures(_tui: any): boolean {
+	// Fixed editor is not supported in pi-zero: always false so all
+	// fixed-editor mouse/scrolling branches take the native path.
+	return false;
 }
 
 /** Mouse hover/click affordances need ccstyle rendering AND the fixed editor. Without
@@ -1601,7 +1582,7 @@ function buildInteractionFrame(
 ): InteractionFrame {
 	const width = Math.max(1, Number(tui?.terminal?.columns) || 80);
 	const fixed = useFixedEditorFeatures(tui);
-	const viewport = fixed ? getFixedEditorViewport(tui) : null;
+	const viewport = null;
 	// fixed-editor: tui.render already returned the visible root slice (screen rows).
 	// native: full buffer; map with the post-doRender previousViewportTop.
 	const lineIndexToScreenRow = (lineIndex: number) =>
@@ -1673,7 +1654,7 @@ function buildInteractionFrame(
 			}
 		}
 	}
-	const scrollHitbox = getFixedEditorScrollButtonHitbox();
+	const scrollHitbox = null;
 	if (scrollButtonVisible && useFixedEditorFeatures(tui) && scrollHitbox) {
 		regions.push({ kind: "scroll-bottom", ...scrollHitbox });
 	}
@@ -1936,29 +1917,19 @@ function teardownToolMouseInteraction(nextFixedEditorFeatures = false): void {
 	collapseCompensationRemainder = 0;
 }
 
-export function installToolMouseInteraction(
-	ctx: any,
-	fixedEditorFeatures = config.fixedEditorFeatures,
-): void {
-	teardownToolMouseInteraction(fixedEditorFeatures);
+export function installToolMouseInteraction(ctx: any): void {
+	teardownToolMouseInteraction(false);
 	if (ctx?.mode !== "tui" || !ctx?.hasUI) return;
 	if (typeof ctx.ui?.onTerminalInput !== "function" || typeof ctx.ui?.setWidget !== "function")
 		return;
 
 	toolMouseUi = ctx.ui;
-	toolMouseFixedFeaturesEnabled = fixedEditorFeatures;
+	toolMouseFixedFeaturesEnabled = false;
 	ctx.ui.setWidget(TOOL_MOUSE_WIDGET_KEY, (tui: any, theme: any) => {
 		toolMouseTui = tui;
-		// Root input capture follows the live compositor; onRebuild re-applies it
-		// once the fixed-editor compositor actually owns the terminal.
-		if (useFixedEditorFeatures(tui)) patchToolMouseInputCapture(tui);
-		// Wrap doRender unconditionally: the fixed-editor rebuild replaces the
-		// chain (setBeforeFixedEditorStart restores it first) and onRebuild
-		// re-applies this wrapper once the compositor owns the terminal.
+		// Fixed editor is not supported in pi-zero; root input capture is native.
 		patchToolMouseMotionAfterRender(tui);
-		// The fixed-editor compositor owns its mouse mode; native Pi gets motion only
-		// while mouse interaction is active (rendering mode on + fixed editor).
-		if (!fixedEditorFeatures && toolMouseInteractionActive())
+		if (toolMouseInteractionActive())
 			tui?.terminal?.write?.(TOOL_MOUSE_MOTION_ENABLE);
 		const widget = {
 			render: (width: number) => renderScrollButton(width, theme),
@@ -2045,13 +2016,7 @@ function modeSettingDescription(mode: CompactStyleMode): string {
 	if (mode === "off") {
 		return "Pi native tool rendering. Fixed editor and diff options below still apply independently.";
 	}
-	return "Claude Code style with rich edit/write diffs. Tune fixed editor and diff options below.";
-}
-
-function fixedEditorSettingDescription(enabled: boolean): string {
-	return enabled
-		? "Pinned editor via @tifan/pi-fixed-editor. Mouse capture, 5-row wheel, tool clicks, back-to-bottom button, message count, and Ctrl+End."
-		: "Native scrolling editor; mouse hover/click and wheel reporting off. Ctrl+End remains enabled.";
+	return "Claude Code style with rich edit/write diffs. Tune diff options below.";
 }
 
 function excludeRenderersDescription(names: readonly string[]): string {
@@ -2162,7 +2127,6 @@ function renderSectionTabBar(
 async function showCcstylePanel(
 	ctx: any,
 	compactStyle: CompactStyleHooks,
-	fixedEditorController: FixedEditorController,
 	toolGrouping?: ToolGroupingHooks,
 	compactThinking?: CompactThinkingController,
 ): Promise<void> {
@@ -2178,13 +2142,6 @@ async function showCcstylePanel(
 			description: modeSettingDescription(config.mode),
 			currentValue: config.mode,
 			values: ["on", "off", "compact"],
-		};
-		const fixedEditorSetting = {
-			id: "fixedEditorFeatures",
-			label: "Fixed editor",
-			description: fixedEditorSettingDescription(config.fixedEditorFeatures),
-			currentValue: config.fixedEditorFeatures ? "on" : "off",
-			values: ["on", "off"],
 		};
 		// Tracks whether the Exclude-tools submenu is open so Tab switches sections
 		// only at the top level (mirrors Zentui settings: Tab = switch sections).
@@ -2287,17 +2244,6 @@ async function showCcstylePanel(
 					modeSetting.description = modeSettingDescription(value as CompactStyleMode);
 					applyStyleMode(value as CompactStyleMode, ctx, compactStyle, toolGrouping);
 					return;
-				case "fixedEditorFeatures":
-					config.fixedEditorFeatures = value === "on";
-					fixedEditorSetting.description = fixedEditorSettingDescription(
-						config.fixedEditorFeatures,
-					);
-					saveConfig();
-					fixedEditorController.setEnabled(config.fixedEditorFeatures);
-					installToolMouseInteraction(ctx);
-					refreshCurrentTranscript(compactStyle, ctx);
-					ctx.ui.notify(`Fixed editor: ${value}`, "info");
-					return;
 				case "excludeRenderers":
 					excludeSetting.currentValue = formatExcludeRenderers(config.excludeRenderers);
 					excludeSetting.description = excludeRenderersDescription(config.excludeRenderers);
@@ -2366,11 +2312,6 @@ async function showCcstylePanel(
 				id: "style",
 				label: "Style",
 				items: [modeSetting, excludeSetting],
-			},
-			{
-				id: "editor",
-				label: "Editor",
-				items: [fixedEditorSetting],
 			},
 			{
 				id: "diff",
@@ -3161,24 +3102,6 @@ export default function (
 ) {
 	// The optional override keeps integration tests independent from the user's global config.
 	if (configOverride) config = normalizeConfig({ ...config, ...configOverride });
-	const fixedEditorController = installFixedEditor(pi, config.fixedEditorFeatures);
-	// Unwrap mouse doRender before compositor construction captures the chain.
-	setBeforeFixedEditorStart(() => {
-		restoreToolMouseRenderPatch();
-	});
-	// Footer/compositor rebuild disposes the old chain; re-wrap the live doRender and repaint.
-	fixedEditorController.onRebuild(() => {
-		const tui = toolMouseTui;
-		if (!tui) return;
-		if (toolMouseFixedFeaturesEnabled) patchToolMouseInputCapture(tui);
-		// compositor.install captured the current chain as originalDoRender, so an
-		// already-installed wrapper keeps receiving calls through it — re-wrapping
-		// only when no wrapper is active avoids stacking one per rebuild/reload.
-		if (!(toolMouseRenderPatchTui === tui && toolMouseRenderPatchState?.active)) {
-			patchToolMouseMotionAfterRender(tui);
-		}
-		tui.requestRender?.(true);
-	});
 	const writeExecutionMetadata = installWriteOverride(pi, new WriteExecutionMetadataStore());
 	let installation:
 		| {
@@ -3221,7 +3144,6 @@ export default function (
 					await showCcstylePanel(
 						ctx,
 						hooks.compactStyle,
-						fixedEditorController,
 						hooks.toolGrouping,
 						compactThinking,
 					);
