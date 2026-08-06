@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { getAgentPath } from "./paths.ts";
+import { getAgentPath } from "../shared/paths.ts";
 
 export const SUPPORTED_COST_CURRENCIES = ["USD", "CNY", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "KRW"] as const;
 export type CostCurrencyCode = typeof SUPPORTED_COST_CURRENCIES[number];

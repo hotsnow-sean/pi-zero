@@ -12,21 +12,21 @@ import { join, dirname } from "node:path";
 import type { ExtensionAPI, ReadonlyFooterDataProvider, Theme } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 
-import { getPreset, PRESETS } from "./presets.ts";
-import { getSeparator } from "./separators.ts";
-import { getFgAnsiCode, ansi } from "./colors.ts";
-import { getDefaultColors } from "./theme.ts";
-import { renderSegment } from "./segments.ts";
+import { getPreset, PRESETS } from "./powerline/presets.ts";
+import { getSeparator } from "./powerline/separators.ts";
+import { getFgAnsiCode, ansi } from "./powerline/colors.ts";
+import { getDefaultColors } from "./powerline/theme.ts";
+import { renderSegment } from "./powerline/segments.ts";
 import {
   getGitStatus,
   subscribeGitUpdates,
   invalidateGitStatus,
   invalidateGitBranch,
-} from "./git-status.ts";
-import { SessionBranchCache, SessionTokenStatsCache } from "./token-stats.ts";
-import { CoreContextUsageCache } from "./context-usage.ts";
-import { createRenderScheduler } from "./render-scheduler.ts";
-import { isStaleExtensionContextError } from "./lifecycle.ts";
+} from "./powerline/git-status.ts";
+import { SessionBranchCache, SessionTokenStatsCache } from "./powerline/token-stats.ts";
+import { CoreContextUsageCache } from "./powerline/context-usage.ts";
+import { createRenderScheduler } from "./powerline/render-scheduler.ts";
+import { isStaleExtensionContextError } from "./powerline/lifecycle.ts";
 import {
   parsePowerlineConfig,
   mergeSegmentOptions,
@@ -36,14 +36,14 @@ import {
   nextPowerlineSettingWithPreset,
   nextPowerlineSettingWithOptions,
   type PowerlineConfig,
-} from "./powerline-config.ts";
+} from "./powerline/powerline-config.ts";
 import type {
   ColorScheme,
   SegmentContext,
   StatusLineSegmentId,
   StatusLineSeparatorStyle,
   StatusLinePreset,
-} from "./types.ts";
+} from "./powerline/types.ts";
 import {
   initVibeManager,
   onVibeBeforeAgentStart,
@@ -60,10 +60,10 @@ import {
   getVibeFileCount,
   parseVibeGenerateArgs,
   generateVibesBatch,
-} from "./working-vibes.ts";
-import workingMessage from "./working-message.ts";
-import contextUsageExtension from "./context.ts";
-import claudeCodeStyle from "./claude-code-style.ts";
+} from "./vibe/working-vibes.ts";
+import workingMessage from "./vibe/working-message.ts";
+import contextUsageExtension from "./context/context.ts";
+import claudeCodeStyle from "./ccstyle/claude-code-style.ts";
 
 const PRESET_NAMES = Object.keys(PRESETS) as StatusLinePreset[];
 

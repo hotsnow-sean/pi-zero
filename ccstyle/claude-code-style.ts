@@ -5,7 +5,7 @@ import {
 	type CompactStyleHooks,
 	type CompactStyleMode,
 } from "./compact-style.ts";
-import { showTextPreview } from "./context.ts";
+import { showTextPreview } from "../shared/text-preview.ts";
 import {
 	installToolGrouping,
 	ToolGroupComponent,

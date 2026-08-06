@@ -11,7 +11,7 @@ import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getAgentPath } from "./paths.ts";
+import { getAgentPath } from "../shared/paths.ts";
 import type { ColorScheme, ColorValue, SemanticColor, ThemeLike } from "./types.ts";
 
 export interface PowerlineThemeConfig {

@@ -6,7 +6,7 @@ import type { AssistantMessage, Context, Model, ProviderStreamOptions } from "@e
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { getAgentPath } from "./paths.ts";
+import { getAgentPath } from "../shared/paths.ts";
 
 type VibeMode = "generate" | "file";
 
