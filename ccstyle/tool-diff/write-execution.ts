@@ -80,7 +80,17 @@ export async function executeWriteWithMetadata(
 	params: { path: string; content: string },
 	signal: AbortSignal | undefined,
 	cwd: string,
-): Promise<{ content: Array<{ type: "text"; text: string }>; details: undefined }> {
+): Promise<
+	{
+		content: Array<{ type: "text"; text: string }>;
+		details: {
+			filePath: string;
+			fileExistedBeforeWrite: boolean;
+			previousContent?: string;
+			diffUnavailableReason?: string;
+		};
+	}
+> {
 	const absolutePath = isAbsolute(params.path) ? params.path : resolve(cwd, params.path);
 	store.delete(toolCallId);
 	try {

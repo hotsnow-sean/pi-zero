@@ -1,8 +1,14 @@
 {
   "name": "@zerosnow/pi-zero",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Curated pi extension suite: powerline status bar + random vibe + token/elapsed-time stats, /context, and ccstyle tool rendering",
   "type": "module",
+  "author": "hotsnow (zerosnow)",
+  "homepage": "https://github.com/hotsnow-sean/pi-zero#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hotsnow-sean/pi-zero.git"
+  },
   "keywords": [
     "pi-package",
     "pi-extension",
@@ -20,7 +26,8 @@
     "vibe/",
     "ccstyle/",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "pi": {
     "extensions": [
@@ -34,6 +41,9 @@
   "bundledDependencies": [
     "pi-compact-thinking"
   ],
+  "optionalDependencies": {
+    "@shikijs/cli": "^4.4.2"
+  },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",

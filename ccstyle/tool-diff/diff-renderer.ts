@@ -12,11 +12,9 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	ANSI_SGR_PATTERN,
-	STYLE_RESET_PARAMS,
 	filterSgrSequences,
 	toSgrParams,
 	readSgrColorSequence,
-	isFiniteSgrParam,
 	expandSgrReset,
 } from "./ansi-utils.ts";
 import {
@@ -31,7 +29,7 @@ import {
 	type DiffPresentationMode,
 } from "./diff-presentation.ts";
 import { sanitizeToolResultText } from "../tool-result-sanitize.ts";
-import { pluralize, sanitizeAnsiForThemedOutput } from "./render-utils.ts";
+import { sanitizeAnsiForThemedOutput } from "./render-utils.ts";
 import { splitWriteContentLines } from "./write-display-utils.ts";
 import { MAX_HL_CHARS, shikiHighlightCache } from "./shiki-highlight.ts";
 import {

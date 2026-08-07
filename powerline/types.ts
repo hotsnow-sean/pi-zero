@@ -159,9 +159,6 @@ export interface QueueSummary {
   ideaCount: number;
   blockedCount: number;
   compacting: boolean;
-  leadingText: string | null;
-  leadingIntent: "steer" | "follow-up" | "post-compact" | "idea" | null;
-  leadingStatus: "queued" | "blocked" | "delivering" | "sent" | "failed" | null;
 }
 
 export interface UsageStats {

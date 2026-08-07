@@ -391,7 +391,7 @@ export default function contextUsageExtension(pi: ExtensionAPI) {
 				);
 
 				if (!action) break;
-				const preview = previewByKey.get(action);
+				const preview = previewByKey.get(action as PreviewKey);
 				if (!preview) continue;
 
 				await showTextPreview(ctx, preview.title, preview.content);

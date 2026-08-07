@@ -280,7 +280,9 @@ export class ToolGroupComponent extends Container {
 
 	setExpanded(expanded: boolean): void {
 		this.expanded = expanded;
-		for (const tool of this.children) tool.setExpanded?.(expanded);
+		for (const tool of this.children) {
+			(tool as { setExpanded?: (expanded: boolean) => void }).setExpanded?.(expanded);
+		}
 	}
 
 	setHintHovered(hovered: boolean): void {

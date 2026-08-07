@@ -44,7 +44,9 @@ Global config lives in `~/.pi/agent/settings.json`. `pi-zero` reads these keys:
 ## Runtime dependencies
 
 `compact-thinking` needs `jiti` (regular dependency) and `pi-compact-thinking` (a pi package, shipped as a bundled dependency).
-When installed via `pi install npm:@zerosnow/pi-zero`, pi runs `npm install`, so both are installed automatically — no manual setup needed.
+When installed via `pi install npm:@zerosnow/pi-zero`, pi runs `npm install`, so these are installed automatically — no manual setup needed.
+
+Syntax highlighting for write diffs is provided by `@shikijs/cli`, shipped as an **optional dependency**. When it is available, `ccstyle` colors code blocks in diff previews; if it cannot be installed, highlighting gracefully falls back to plain rendering.
 
 ## Structure
 
@@ -61,7 +63,7 @@ pi-zero/
 ## Compatibility & Notes
 
 - `ccstyle` patches pi's tool rendering (similar to fixed-editor); if you ever see layout issues, run `/ccstyle off` to fall back to native rendering.
-- Fixed editor is intentionally not included.
+- Fixed editor is **not** included, and the fixed-editor-only tool-mouse interaction (hover/click/scroll affordances) has been removed.
 - Multiple pi processes are isolated: state is process-local (global symbols), and session boundaries are cleaned on `session_start`.
 
 ## Acknowledgements

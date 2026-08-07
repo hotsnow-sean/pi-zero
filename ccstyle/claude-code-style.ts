@@ -5,11 +5,9 @@ import {
 	type CompactStyleHooks,
 	type CompactStyleMode,
 } from "./compact-style.ts";
-import { showTextPreview } from "../shared/text-preview.ts";
 import type { CompactThinkingConfig, CompactThinkingController } from "./compact-thinking.ts";
 import {
 	installToolGrouping,
-	ToolGroupComponent,
 	type ToolGroupingHooks,
 } from "./tool-grouping.ts";
 import { TOOL_LOADING_INTERVAL_MS, toolLoadingIcon } from "./tool-loading-icon.ts";
@@ -585,7 +583,7 @@ export class ExpandedToolIoView {
 
 	render(width: number): string[] {
 		if (this.cachedLines !== undefined && this.cachedWidth === width) {
-			return withIoViewMarkers(this, this.cachedLines);
+			return this.cachedLines;
 		}
 
 		const theme = this.theme;
@@ -701,7 +699,7 @@ export class ExpandedToolIoView {
 
 		this.cachedWidth = width;
 		this.cachedLines = lines;
-		return withIoViewMarkers(this, lines);
+		return lines;
 	}
 
 	invalidate(): void {
@@ -875,7 +873,6 @@ function renderExpandedToolResult(
 		} else {
 			view = new ExpandedToolIoView(theme, inputBody, outputBody, isError, maxLines, maxLines);
 		}
-		if (context) rememberIoView(context, view);
 		return view;
 	}
 
@@ -886,945 +883,6 @@ function renderExpandedToolResult(
 
 export function formatExpandHint(lineCount: number): string {
 	return ` (${lineCount} more line${lineCount === 1 ? "" : "s"} / click)`;
-}
-
-function expandHint(theme: any, lineCount: number, hovered = false): string {
-	// Keep interaction guidance neutral; it should not inherit success/error
-	// coloring from the tool result surrounding it.
-	return theme.fg(hovered ? "text" : "muted", formatExpandHint(lineCount));
-}
-
-type SgrMousePacket = {
-	code: number;
-	col: number;
-	row: number;
-	final: "M" | "m";
-};
-
-type FrameToolRender = {
-	component: any;
-	lines: string[];
-	contentBoxLines: number;
-};
-
-/** Final painted placement of one outermost tool/group row after parent layout. */
-type FrameToolPlacement = {
-	component: any;
-	componentRow: number;
-	lineIndex: number;
-	/** Marker-stripped final line text as painted after parent layout. */
-	finalLine: string;
-	view?: ExpandedToolIoView;
-	section?: ToolIoSection;
-};
-
-type InteractionRegion = {
-	kind: "collapsed-hint" | "expanded-card" | "show-more" | "scroll-bottom";
-	row: number;
-	startCol: number;
-	endCol: number;
-	component?: any;
-	view?: ExpandedToolIoView;
-	section?: ToolIoSection;
-};
-
-type InteractionFrame = { regions: InteractionRegion[] };
-
-/** Zero-width APC row marker (like pi CURSOR_MARKER); stripped before terminal output. */
-const TOOL_FRAME_MARKER_RE = /_cc:t(\d+):(\d+)/g;
-const TOOL_VIEW_MARKER_RE = /_cc:v(\d+):([io])/g;
-const toolFrameMarker = (id: number, row: number) => `_cc:t${id}:${row}`;
-const toolViewMarker = (id: number, section: ToolIoSection) =>
-	`_cc:v${id}:${section === "input" ? "i" : "o"}`;
-
-/** Per-frame ExpandedToolIoView ids for unambiguous show-more hit testing. */
-type IoViewFrameState = {
-	viewIds: Map<ExpandedToolIoView, number>;
-	idToView: Map<number, ExpandedToolIoView>;
-	nextId: number;
-};
-let activeIoViewFrame: IoViewFrameState | null = null;
-
-function frameViewId(view: ExpandedToolIoView): number | null {
-	if (!activeIoViewFrame) return null;
-	let id = activeIoViewFrame.viewIds.get(view);
-	if (id === undefined) {
-		id = activeIoViewFrame.nextId++;
-		activeIoViewFrame.viewIds.set(view, id);
-		activeIoViewFrame.idToView.set(id, view);
-	}
-	return id;
-}
-
-/** cachedLines stay clean; only the returned paint copy carries show-more view markers. */
-function withIoViewMarkers(view: ExpandedToolIoView, lines: string[]): string[] {
-	const id = frameViewId(view);
-	if (id === null) return lines;
-	// Mark by exact header row from render — never scan body text for Input/Output labels.
-	const marked = lines.slice();
-	for (const { section, line } of view.showMoreHeaderLineIndexes()) {
-		if (line < 0 || line >= marked.length) continue;
-		marked[line] = `${marked[line]}${toolViewMarker(id, section)}`;
-	}
-	return marked;
-}
-
-const TOOL_MOUSE_WIDGET_KEY = "ccstyle-tool-mouse";
-const TOOL_MOUSE_MOTION_ENABLE = "\x1b[?1003h\x1b[?1006h";
-const TOOL_MOUSE_DISABLE = "\x1b[?1006l\x1b[?1003l\x1b[?1000l";
-const ZENTUI_PAGE_UP_INPUT = /^\x1b\[5;9(?::[12])?~$|^\x1b\[57421;9(?::[12])?u$|^\x1b\[1;6A$/;
-const ZENTUI_PAGE_DOWN_INPUT = /^\x1b\[6;9(?::[12])?~$|^\x1b\[57422;9(?::[12])?u$|^\x1b\[1;6B$/;
-const SCROLL_BOTTOM_SHORTCUT = "ctrl+end";
-const ZENTUI_WHEEL_ROWS = 3;
-let toolMouseTui: any = null;
-let toolMouseUi: any = null;
-let toolMouseFixedFeaturesEnabled = false;
-let collapseCompensationRemainder = 0;
-let toolMouseInputUnsubscribe: (() => void) | null = null;
-let toolMouseInputPatchTui: any = null;
-let toolMouseInputPatchOriginalHandle: ((...args: any[]) => any) | null = null;
-let toolMouseInputPatchWrapper: ((...args: any[]) => any) | null = null;
-let toolMouseRenderPatchTui: any = null;
-let toolMouseRenderPatchOriginal: ((...args: any[]) => any) | null = null;
-let toolMouseRenderPatchWrapper: ((...args: any[]) => any) | null = null;
-let toolMouseRenderPatchState: { active: boolean } | null = null;
-let toolMouseRawWrite: ((data: string) => unknown) | null = null;
-let scrollButtonVisible = false;
-let scrollButtonHovered = false;
-let scrollButtonWidget: any = null;
-let pendingScrollMessages = 0;
-let assistantMessageActive = false;
-let scrollButtonSyncScheduled = false;
-let sessionRenderTimer: ReturnType<typeof setTimeout> | null = null;
-let hoveredToolCallId: string | null = null;
-let hoveredToolGroup: ToolGroupComponent | null = null;
-let latestInteractionFrame: InteractionFrame = { regions: [] };
-
-function parseSgrMousePackets(data: string): SgrMousePacket[] | null {
-	const pattern = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
-	const packets: SgrMousePacket[] = [];
-	let offset = 0;
-
-	for (const match of data.matchAll(pattern)) {
-		if (match.index !== offset) return null;
-		offset = match.index + match[0].length;
-		packets.push({
-			code: Number(match[1]),
-			col: Number(match[2]),
-			row: Number(match[3]),
-			final: match[4] as "M" | "m",
-		});
-	}
-
-	return packets.length > 0 && offset === data.length ? packets : null;
-}
-
-function isSgrLeftPress(packet: SgrMousePacket): boolean {
-	const baseButton = packet.code & ~(4 | 8 | 16 | 32);
-	return packet.final === "M" && baseButton === 0 && (packet.code & 32) === 0;
-}
-
-function stripTerminalSequencesPreservingLayout(value: string): string {
-	return value
-		.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
-		.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
-}
-
-function stripTerminalSequences(value: string): string {
-	return stripTerminalSequencesPreservingLayout(value).replace(/\s+/g, " ").trim();
-}
-
-function isToolExecutionComponent(value: any): boolean {
-	return Boolean(
-		value &&
-			typeof value === "object" &&
-			typeof value.toolCallId === "string" &&
-			typeof value.setExpanded === "function" &&
-			typeof value.render === "function",
-	);
-}
-
-function collectToolComponents(component: any, tools: any[], seen = new Set<any>()): void {
-	if (!component || typeof component !== "object" || seen.has(component)) return;
-	seen.add(component);
-	if (isToolExecutionComponent(component)) {
-		tools.push(component);
-		return;
-	}
-	if (!Array.isArray(component.children)) return;
-	for (const child of component.children) collectToolComponents(child, tools, seen);
-}
-
-function stripToolFrameMarkers(line: string): string {
-	return line.replace(TOOL_FRAME_MARKER_RE, "").replace(TOOL_VIEW_MARKER_RE, "");
-}
-
-function extractToolFramePlacements(
-	lines: string[],
-	idToComponent: Map<number, any>,
-	idToView: Map<number, ExpandedToolIoView>,
-): { lines: string[]; placements: FrameToolPlacement[] } {
-	const placements: FrameToolPlacement[] = [];
-	const cleaned = lines.map((line, lineIndex) => {
-		const toolMatches = [...line.matchAll(TOOL_FRAME_MARKER_RE)];
-		const viewMatches = [...line.matchAll(TOOL_VIEW_MARKER_RE)];
-		const finalLine = stripToolFrameMarkers(line);
-		let view: ExpandedToolIoView | undefined;
-		let section: ToolIoSection | undefined;
-		for (const match of viewMatches) {
-			const candidate = idToView.get(Number(match[1]));
-			if (!candidate) continue;
-			view = candidate;
-			section = match[2] === "i" ? "input" : "output";
-			break;
-		}
-		for (const match of toolMatches) {
-			const component = idToComponent.get(Number(match[1]));
-			if (!component) continue;
-			placements.push({
-				component,
-				componentRow: Number(match[2]),
-				lineIndex,
-				finalLine,
-				view,
-				section,
-			});
-		}
-		return finalLine;
-	});
-	return { lines: cleaned, placements };
-}
-
-/** Summary markers used by Pi and ccstyle; unlike the trailing hint, these survive truncation. */
-const COLLAPSED_TOOL_SUMMARY = /^\s*(?:↳|└|⎿|●|✓|✗|…)/;
-
-function useFixedEditorFeatures(_tui: any): boolean {
-	// Fixed editor is not supported in pi-zero: always false so all
-	// fixed-editor mouse/scrolling branches take the native path.
-	return false;
-}
-
-/** Mouse hover/click affordances need ccstyle rendering AND the fixed editor. Without
- * the fixed editor, Pi's native TUI has no mouse handling, so any reporting mode leaves
- * the wheel in a dead zone — native mode must leave reporting off entirely. */
-function toolMouseInteractionActive(): boolean {
-	return config.mode !== "off" && toolMouseFixedFeaturesEnabled;
-}
-
-function formatShortcut(shortcut: string): string {
-	return shortcut
-		.split("+")
-		.map((part) =>
-			part.length <= 1 ? part.toUpperCase() : `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`,
-		)
-		.join("+");
-}
-
-function isScrollBottomInput(data: string): boolean {
-	return matchesKey(data, SCROLL_BOTTOM_SHORTCUT);
-}
-
-function isScrollNavigationInput(data: string): boolean {
-	if (
-		matchesKey(data, "pageUp") ||
-		matchesKey(data, "pageDown") ||
-		ZENTUI_PAGE_UP_INPUT.test(data) ||
-		ZENTUI_PAGE_DOWN_INPUT.test(data)
-	) {
-		return true;
-	}
-	const packets = parseSgrMousePackets(data);
-	return Boolean(
-		packets?.some((packet) => {
-			const baseButton = packet.code & ~(4 | 8 | 16 | 32);
-			return packet.final === "M" && (baseButton === 64 || baseButton === 65);
-		}),
-	);
-}
-
-function hideScrollButton(tui: any): void {
-	const changed = scrollButtonVisible || scrollButtonHovered || pendingScrollMessages > 0;
-	scrollButtonVisible = false;
-	scrollButtonHovered = false;
-	pendingScrollMessages = 0;
-	if (changed) tui.requestRender?.();
-}
-
-function scheduleScrollButtonSync(tui: any, data: string): void {
-	if (
-		!useFixedEditorFeatures(tui) ||
-		!toolMouseInteractionActive() ||
-		!isScrollNavigationInput(data) ||
-		scrollButtonSyncScheduled
-	)
-		return;
-	scrollButtonSyncScheduled = true;
-	const previousLines = tui.previousLines;
-	const check = (attempt: number) => {
-		scrollButtonSyncScheduled = false;
-		if (toolMouseTui !== tui) return;
-		// Pi renders on its own frame timer. Inspect the resulting viewport before
-		// showing the button so empty or non-scrollable transcripts never flash it.
-		const rendered = tui.previousLines !== previousLines;
-		if (!rendered && attempt < 4) {
-			scrollButtonSyncScheduled = true;
-			const timer = setTimeout(() => check(attempt + 1), 16);
-			if (typeof timer === "object" && timer !== null && "unref" in timer) {
-				(timer as { unref: () => void }).unref();
-			}
-			return;
-		}
-		const nextVisible = false;
-		if (!nextVisible) pendingScrollMessages = 0;
-		if (nextVisible !== scrollButtonVisible) {
-			scrollButtonVisible = nextVisible;
-			tui.requestRender?.();
-		}
-	};
-	process.nextTick(() => check(0));
-}
-
-function updateScrollButtonFromInput(tui: any, data: string): void {
-	if (!useFixedEditorFeatures(tui) || !toolMouseInteractionActive()) return;
-	if (matchesKey(data, "enter") || matchesKey(data, "return")) hideScrollButton(tui);
-}
-
-function renderComponentTree(component: any, width: number): string[] {
-	if (!component || typeof component !== "object") return [];
-	try {
-		const lines = component.render?.(width);
-		if (Array.isArray(lines) && lines.length > 0) return lines;
-	} catch {
-		// Fall through to children for hidden container renderers.
-	}
-	if (!Array.isArray(component.children)) return [];
-	return component.children.flatMap((child: any) => renderComponentTree(child, width));
-}
-
-
-function handleScrollButtonClick(_tui: any, _packet: SgrMousePacket): boolean {
-	// Scroll button is only reachable with the (unsupported) fixed editor; always inactive.
-	return false;
-}
-
-function scheduleCollapseViewportCompensation(
-	tui: any,
-	removedRows: number,
-	packet: SgrMousePacket,
-): void {
-	if (removedRows <= 0 || !useFixedEditorFeatures(tui)) return;
-	const originalHandle = toolMouseInputPatchTui === tui ? toolMouseInputPatchOriginalHandle : null;
-	if (!originalHandle) return;
-
-	process.nextTick(() => {
-		if (toolMouseTui !== tui || toolMouseInputPatchOriginalHandle !== originalHandle) return;
-		const targetRows = removedRows + collapseCompensationRemainder;
-		const dispatches = Math.max(0, Math.round(targetRows / ZENTUI_WHEEL_ROWS));
-		collapseCompensationRemainder = targetRows - dispatches * ZENTUI_WHEEL_ROWS;
-		const wheelDown = `\x1b[<65;${packet.col};${packet.row}M`;
-		for (let index = 0; index < dispatches; index++) {
-			Reflect.apply(originalHandle, tui, [wheelDown]);
-		}
-	});
-}
-
-const ioViewInvalidators = new WeakMap<ExpandedToolIoView, () => void>();
-let hoveredToolIoView: ExpandedToolIoView | null = null;
-let hoveredToolIoSection: ToolIoSection | null = null;
-
-function rememberIoView(context: any, view: ExpandedToolIoView): void {
-	if (!context || typeof context !== "object") return;
-	if (typeof context.invalidate === "function") ioViewInvalidators.set(view, context.invalidate);
-	if (!context.state || typeof context.state !== "object") context.state = {};
-	context.state.ccstyleIoView = view;
-}
-
-function collapsedHintHitbox(line: string): { startCol: number; endCol: number } | null {
-	const plain = stripTerminalSequencesPreservingLayout(line);
-	const match = /(\([^()\n]* \/ click\)|press ctrl-o to expand)(?=\)?\s*$)/.exec(plain);
-	if (!match?.[1]) return null;
-	const startCol = visibleWidth(plain.slice(0, match.index)) + 1;
-	return { startCol, endCol: startCol + visibleWidth(match[1]) - 1 };
-}
-
-function interactionRegionAt(packet: SgrMousePacket): InteractionRegion | null {
-	const matches = latestInteractionFrame.regions.filter(
-		(region) =>
-			region.row === packet.row && packet.col >= region.startCol && packet.col <= region.endCol,
-	);
-	return (
-		matches.find((region) => region.kind === "show-more") ??
-		matches.find((region) => region.kind === "scroll-bottom") ??
-		matches.find((region) => region.kind === "collapsed-hint") ??
-		matches.find((region) => region.kind === "expanded-card") ??
-		null
-	);
-}
-
-function tryOpenToolIoShowMore(region: InteractionRegion): boolean {
-	const ioView = region.view;
-	const section = region.section;
-	if (!ioView || !section) return false;
-	const ui = toolMouseUi;
-	if (!ui || typeof ui.custom !== "function") {
-		ui?.notify?.("Full preview requires TUI custom UI", "warning");
-		return true;
-	}
-	const title = section === "input" ? "Tool Input" : "Tool Output";
-	const content = section === "input" ? ioView.getInputBody() : ioView.getOutputBody();
-	void showTextPreview({ ui }, title, content || "(empty)");
-	return true;
-}
-
-function setHoveredToolIo(view: ExpandedToolIoView | null, section: ToolIoSection | null): boolean {
-	if (view === hoveredToolIoView && section === hoveredToolIoSection) return false;
-	if (hoveredToolIoView) {
-		hoveredToolIoView.setHoveredSection(null);
-		ioViewInvalidators.get(hoveredToolIoView)?.();
-	}
-	hoveredToolIoView = view;
-	hoveredToolIoSection = section;
-	if (view) {
-		view.setHoveredSection(section);
-		ioViewInvalidators.get(view)?.();
-	}
-	return true;
-}
-
-function setHoveredToolGroup(group: ToolGroupComponent | null): boolean {
-	if (group === hoveredToolGroup) return false;
-	hoveredToolGroup?.setHintHovered(false);
-	hoveredToolGroup = group;
-	group?.setHintHovered(true);
-	return true;
-}
-
-function updateToolSummaryHover(tui: any, packet: SgrMousePacket): void {
-	if ((packet.code & 32) === 0 || packet.final !== "M") return;
-	const region = interactionRegionAt(packet);
-	const nextScrollButtonHovered = region?.kind === "scroll-bottom";
-	const scrollButtonChanged = nextScrollButtonHovered !== scrollButtonHovered;
-	scrollButtonHovered = nextScrollButtonHovered;
-	const component = region?.component;
-	const nextToolCallId = region?.kind === "collapsed-hint" ? (component?.toolCallId ?? null) : null;
-	const nextGroup = component instanceof ToolGroupComponent ? component : null;
-	const nextIoView = region?.kind === "show-more" ? (region.view ?? null) : null;
-	const nextIoSection = region?.kind === "show-more" ? (region.section ?? null) : null;
-	const changed = nextToolCallId !== hoveredToolCallId;
-	hoveredToolCallId = nextToolCallId;
-	if (
-		scrollButtonChanged ||
-		setHoveredToolIo(nextIoView, nextIoSection) ||
-		setHoveredToolGroup(nextGroup) ||
-		changed
-	)
-		tui.requestRender?.();
-}
-
-function toggleToolAtMouseClick(tui: any, packet: SgrMousePacket): boolean {
-	const region = interactionRegionAt(packet);
-	if (!region) return false;
-	if (region.kind === "scroll-bottom") return false;
-	if (region.kind === "show-more") return tryOpenToolIoShowMore(region);
-	const component = region.component;
-	if (!component) return false;
-	const width = Math.max(1, Number(tui?.terminal?.columns) || 80);
-	if (region.kind === "expanded-card") {
-		const previousHeight = renderComponentTree(component, width).length;
-		component.setExpanded(false);
-		hoveredToolCallId = null;
-		setHoveredToolGroup(null);
-		setHoveredToolIo(null, null);
-		component.invalidate?.();
-		const nextHeight = renderComponentTree(component, width).length;
-		tui.requestRender?.();
-		scheduleCollapseViewportCompensation(tui, previousHeight - nextHeight, packet);
-		return true;
-	}
-	component.setExpanded(true);
-	hoveredToolCallId = null;
-	setHoveredToolGroup(null);
-	setHoveredToolIo(null, null);
-	component.invalidate?.();
-	tui.requestRender?.();
-	return true;
-}
-
-function renderScrollButton(width: number, theme: any): string[] {
-	if (!scrollButtonVisible || !useFixedEditorFeatures(toolMouseTui)) return [];
-	const shortcut = formatShortcut(SCROLL_BOTTOM_SHORTCUT);
-	const messageText =
-		pendingScrollMessages > 0
-			? `${pendingScrollMessages} new message${pendingScrollMessages === 1 ? "" : "s"}`
-			: "Back to bottom";
-	const label = theme.fg(
-		scrollButtonHovered ? "text" : "accent",
-		`[ ↓ ${messageText} · ${shortcut} ]`,
-	);
-	const leftPad = Math.max(0, Math.floor((width - visibleWidth(label)) / 2));
-	return [`${" ".repeat(leftPad)}${truncateToWidth(label, width, "…")}`];
-}
-
-/**
- * pi-zentui consumes left-button presses for text selection. Intercept only a
- * tool-row click at the TUI input boundary, before extension listeners run.
- * Keyboard, wheel, drag, release, and non-tool clicks continue through Pi's
- * original dispatcher, preserving pi-zentui's scroll-to-bottom behavior.
- */
-function patchToolMouseInputCapture(tui: any): void {
-	if (toolMouseInputPatchTui === tui) return;
-
-	restoreToolMouseInputCapture();
-	const originalHandle = tui?.handleInput;
-	if (typeof originalHandle !== "function") return;
-
-	const wrapper = function (this: any, ...args: any[]): any {
-		const data = args[0];
-		if (typeof data === "string") {
-			updateScrollButtonFromInput(this, data);
-			// Capture the current viewport before Pi/Zentui applies the scroll input.
-			scheduleScrollButtonSync(this, data);
-			const packets = parseSgrMousePackets(data);
-			if (packets && toolMouseInteractionActive()) {
-				for (const packet of packets) {
-					// Fixed-editor owners may consume motion before extension listeners run,
-					// so hover must be handled at the root input boundary too.
-					updateToolSummaryHover(this, packet);
-					if (!isSgrLeftPress(packet)) continue;
-					if (handleScrollButtonClick(this, packet) || toggleToolAtMouseClick(this, packet)) return;
-				}
-			}
-		}
-		let result = Reflect.apply(originalHandle, this, args);
-		if (typeof data === "string") scheduleScrollButtonSync(this, data);
-		return result;
-	};
-
-	try {
-		tui.handleInput = wrapper;
-	} catch {
-		return;
-	}
-	toolMouseInputPatchTui = tui;
-	toolMouseInputPatchOriginalHandle = originalHandle;
-	toolMouseInputPatchWrapper = wrapper;
-}
-
-function restoreToolMouseInputCapture(): void {
-	if (
-		toolMouseInputPatchTui &&
-		toolMouseInputPatchOriginalHandle &&
-		toolMouseInputPatchTui.handleInput === toolMouseInputPatchWrapper
-	) {
-		toolMouseInputPatchTui.handleInput = toolMouseInputPatchOriginalHandle;
-	}
-	toolMouseInputPatchTui = null;
-	toolMouseInputPatchOriginalHandle = null;
-	toolMouseInputPatchWrapper = null;
-}
-
-function restoreToolMouseRenderPatch(): void {
-	if (toolMouseRenderPatchState) toolMouseRenderPatchState.active = false;
-	if (
-		toolMouseRenderPatchTui &&
-		toolMouseRenderPatchOriginal &&
-		toolMouseRenderPatchTui.doRender === toolMouseRenderPatchWrapper
-	) {
-		toolMouseRenderPatchTui.doRender = toolMouseRenderPatchOriginal;
-	}
-	toolMouseRenderPatchTui = null;
-	toolMouseRenderPatchOriginal = null;
-	toolMouseRenderPatchWrapper = null;
-	toolMouseRenderPatchState = null;
-	toolMouseRawWrite = null;
-	latestInteractionFrame = { regions: [] };
-}
-
-function buildInteractionFrame(
-	tui: any,
-	renderedTools: FrameToolRender[],
-	placements: FrameToolPlacement[],
-): InteractionFrame {
-	const width = Math.max(1, Number(tui?.terminal?.columns) || 80);
-	const fixed = useFixedEditorFeatures(tui);
-	const viewport = null;
-	// fixed-editor: tui.render already returned the visible root slice (screen rows).
-	// native: full buffer; map with the post-doRender previousViewportTop.
-	const lineIndexToScreenRow = (lineIndex: number) =>
-		fixed ? lineIndex + 1 : lineIndex - (Number(tui?.previousViewportTop) || 0) + 1;
-	const visibleRows = fixed
-		? (viewport?.visibleLines.length ??
-			(Array.isArray(tui?.previousLines) ? tui.previousLines.length : Number.POSITIVE_INFINITY))
-		: Math.max(1, Number(tui?.terminal?.rows) || Number.POSITIVE_INFINITY);
-	const regions: InteractionRegion[] = [];
-	const renderedByComponent = new Map<any, FrameToolRender>();
-	for (const rendered of renderedTools) renderedByComponent.set(rendered.component, rendered);
-	const placementsByComponent = new Map<any, FrameToolPlacement[]>();
-	for (const placement of placements) {
-		const list = placementsByComponent.get(placement.component) ?? [];
-		list.push(placement);
-		placementsByComponent.set(placement.component, list);
-	}
-	for (const [component, componentPlacements] of placementsByComponent) {
-		const rendered = renderedByComponent.get(component);
-		if (!rendered) continue;
-		for (const placement of componentPlacements) {
-			const finalRow = lineIndexToScreenRow(placement.lineIndex);
-			if (finalRow < 1 || finalRow > visibleRows) continue;
-			// Hit columns come from the final painted line (parent may prefix/transform).
-			const line = placement.finalLine;
-			if (!component.expanded) {
-				const box = collapsedHintHitbox(line);
-				if (box && COLLAPSED_TOOL_SUMMARY.test(stripTerminalSequences(line))) {
-					regions.push({ kind: "collapsed-hint", row: finalRow, ...box, component });
-				}
-				continue;
-			}
-			if (placement.view && placement.section) {
-				const plain = stripTerminalSequencesPreservingLayout(line);
-				const box = placement.view.showMoreHitbox(plain);
-				if (box) {
-					regions.push({
-						kind: "show-more",
-						row: finalRow,
-						...box,
-						component,
-						view: placement.view,
-						section: placement.section,
-					});
-				}
-			}
-		}
-		if (!component.expanded) continue;
-		let cardStart = 0;
-		if (!(component instanceof ToolGroupComponent)) {
-			const box = component.contentBox;
-			if (!box || !Array.isArray(component.children) || !component.children.includes(box)) {
-				continue;
-			}
-			if (!rendered.contentBoxLines) continue;
-			cardStart = Math.max(0, rendered.lines.length - rendered.contentBoxLines);
-		}
-		for (const placement of componentPlacements) {
-			if (placement.componentRow < cardStart) continue;
-			const finalRow = lineIndexToScreenRow(placement.lineIndex);
-			if (finalRow >= 1 && finalRow <= visibleRows) {
-				regions.push({
-					kind: "expanded-card",
-					row: finalRow,
-					startCol: 1,
-					endCol: width,
-					component,
-				});
-			}
-		}
-	}
-	const scrollHitbox = null;
-	if (scrollButtonVisible && useFixedEditorFeatures(tui) && scrollHitbox) {
-		regions.push({ kind: "scroll-bottom", ...scrollHitbox });
-	}
-	return { regions };
-}
-
-function defineRenderOverride(
-	target: any,
-	wrapped: (...args: any[]) => any,
-): PropertyDescriptor | undefined {
-	const descriptor = Object.getOwnPropertyDescriptor(target, "render");
-	try {
-		Object.defineProperty(
-			target,
-			"render",
-			descriptor && "value" in descriptor
-				? { ...descriptor, value: wrapped }
-				: {
-						configurable: true,
-						enumerable: descriptor?.enumerable ?? false,
-						writable: true,
-						value: wrapped,
-					},
-		);
-		return descriptor;
-	} catch {
-		return undefined;
-	}
-}
-
-function restoreRenderOverride(target: any, descriptor: PropertyDescriptor | undefined): void {
-	try {
-		if (descriptor) Object.defineProperty(target, "render", descriptor);
-		else delete target.render;
-	} catch {
-		// Keep restoring siblings after a hostile descriptor change.
-	}
-}
-
-function patchToolMouseMotionAfterRender(tui: any): void {
-	// Same tui is not enough: footer/compositor rebuild may replace doRender under us.
-	if (
-		toolMouseRenderPatchTui === tui &&
-		toolMouseRenderPatchState?.active &&
-		tui.doRender === toolMouseRenderPatchWrapper
-	) {
-		return;
-	}
-	restoreToolMouseRenderPatch();
-	const original = tui?.doRender;
-	const terminal = tui?.terminal;
-	const rawWrite = typeof terminal?.write === "function" ? terminal.write : undefined;
-	if (typeof original !== "function") return;
-
-	toolMouseRawWrite = rawWrite ? (data) => Reflect.apply(rawWrite, terminal, [data]) : null;
-	const patchState = { active: true };
-	const wrapper = function (this: any, ...args: any[]) {
-		if (!patchState.active) return Reflect.apply(original, this, args);
-		const renderedTools: FrameToolRender[] = [];
-		const idToComponent = new Map<number, any>();
-		const frame: IoViewFrameState = {
-			viewIds: new Map(),
-			idToView: new Map(),
-			nextId: 0,
-		};
-		const restores: Array<{ target: any; descriptor?: PropertyDescriptor }> = [];
-		const outermost: any[] = [];
-		collectToolComponents(this, outermost);
-		let nextId = 0;
-		for (const component of outermost) {
-			const originalRender = component.render;
-			if (typeof originalRender !== "function") continue;
-			const id = nextId++;
-			idToComponent.set(id, component);
-			const wrappedRender = function (this: any, ...renderArgs: any[]) {
-				let contentBoxLines = 0;
-				const box = component.contentBox;
-				let boxRestore: { target: any; descriptor?: PropertyDescriptor } | undefined;
-				if (
-					box &&
-					Array.isArray(component.children) &&
-					component.children.includes(box) &&
-					typeof box.render === "function"
-				) {
-					const boxOriginal = box.render;
-					const boxWrapped = function (this: any, ...boxArgs: any[]) {
-						const boxLines = Reflect.apply(boxOriginal, this, boxArgs);
-						if (Array.isArray(boxLines)) contentBoxLines = boxLines.length;
-						return boxLines;
-					};
-					const boxDescriptor = defineRenderOverride(box, boxWrapped);
-					if (boxDescriptor !== undefined || box.render === boxWrapped) {
-						boxRestore = { target: box, descriptor: boxDescriptor };
-					}
-				}
-				try {
-					const lines = Reflect.apply(originalRender, this, renderArgs);
-					if (!Array.isArray(lines)) return lines;
-					renderedTools.push({
-						component,
-						lines: lines.map((line) => String(line)),
-						contentBoxLines,
-					});
-					return lines.map((line, row) => `${line}${toolFrameMarker(id, row)}`);
-				} finally {
-					if (boxRestore) restoreRenderOverride(boxRestore.target, boxRestore.descriptor);
-				}
-			};
-			const descriptor = defineRenderOverride(component, wrappedRender);
-			if (descriptor !== undefined || component.render === wrappedRender) {
-				restores.push({ target: component, descriptor });
-			}
-		}
-		let placements: FrameToolPlacement[] = [];
-		const originalTuiRender = typeof this.render === "function" ? this.render : null;
-		let tuiRenderDescriptor: PropertyDescriptor | undefined;
-		let sawTuiRender = false;
-		if (originalTuiRender) {
-			const wrappedTuiRender = function (this: any, ...renderArgs: any[]) {
-				const lines = Reflect.apply(originalTuiRender, this, renderArgs);
-				if (!Array.isArray(lines)) return lines;
-				sawTuiRender = true;
-				const extracted = extractToolFramePlacements(
-					lines.map((line) => String(line)),
-					idToComponent,
-					frame.idToView,
-				);
-				placements = extracted.placements;
-				return extracted.lines;
-			};
-			tuiRenderDescriptor = defineRenderOverride(this, wrappedTuiRender);
-		}
-		let succeeded = false;
-		const previousFrame = activeIoViewFrame;
-		activeIoViewFrame = frame;
-		try {
-			const result = Reflect.apply(original, this, args);
-			succeeded = true;
-			// Test harnesses may paint via doRender without tui.render; recover markers there.
-			if (!sawTuiRender && Array.isArray(this.previousLines)) {
-				const extracted = extractToolFramePlacements(
-					this.previousLines.map((line: unknown) => String(line)),
-					idToComponent,
-					frame.idToView,
-				);
-				this.previousLines = extracted.lines;
-				placements = extracted.placements;
-			}
-			if (!useFixedEditorFeatures(this) && toolMouseInteractionActive())
-				toolMouseRawWrite?.(TOOL_MOUSE_MOTION_ENABLE);
-			return result;
-		} finally {
-			activeIoViewFrame = previousFrame;
-			if (originalTuiRender) restoreRenderOverride(this, tuiRenderDescriptor);
-			for (const { target, descriptor } of restores.reverse()) {
-				restoreRenderOverride(target, descriptor);
-			}
-			if (succeeded) {
-				latestInteractionFrame = buildInteractionFrame(this, renderedTools, placements);
-			}
-		}
-	};
-	try {
-		tui.doRender = wrapper;
-	} catch {
-		toolMouseRawWrite = null;
-		return;
-	}
-	toolMouseRenderPatchTui = tui;
-	toolMouseRenderPatchOriginal = original;
-	toolMouseRenderPatchWrapper = wrapper;
-	toolMouseRenderPatchState = patchState;
-	if (!useFixedEditorFeatures(tui) && toolMouseInteractionActive())
-		toolMouseRawWrite?.(TOOL_MOUSE_MOTION_ENABLE);
-}
-
-function handleToolMouseInput(data: string): { consume: true } | undefined {
-	if (!toolMouseTui) return undefined;
-	if (
-		toolMouseInputPatchTui === toolMouseTui &&
-		toolMouseTui.handleInput === toolMouseInputPatchWrapper
-	)
-		return undefined;
-	updateScrollButtonFromInput(toolMouseTui, data);
-	if (isScrollBottomInput(data)) {
-		if (!toolMouseFixedFeaturesEnabled) {
-			// Native Pi scrolls through terminal history rather than an internal
-			// viewport. A harmless terminal write makes Ctrl+End snap that history
-			// to the active cursor without enabling mouse reporting.
-			toolMouseTui.terminal?.write?.("\x1b[0m");
-			toolMouseTui.requestRender?.();
-			return { consume: true };
-		}
-	}
-	// Off mode restores native input: wheel keeps scrolling through Pi's normal
-	// dispatcher, while hover/click affordances are entirely inactive.
-	if (!toolMouseInteractionActive()) return undefined;
-	const packets = parseSgrMousePackets(data);
-	if (!packets) {
-		scheduleScrollButtonSync(toolMouseTui, data);
-		return undefined;
-	}
-
-	let consumed = false;
-	for (const packet of packets) {
-		updateToolSummaryHover(toolMouseTui, packet);
-		if (!isSgrLeftPress(packet)) continue;
-		if (
-			handleScrollButtonClick(toolMouseTui, packet) ||
-			toggleToolAtMouseClick(toolMouseTui, packet)
-		) {
-			consumed = true;
-		}
-	}
-
-	// Let scrolling, motion, release, and clicks outside tool results reach the
-	// normal TUI input chain (including other extensions such as pi-zentui).
-	scheduleScrollButtonSync(toolMouseTui, data);
-	return consumed ? { consume: true } : undefined;
-}
-
-function teardownToolMouseInteraction(nextFixedEditorFeatures = false): void {
-	if (sessionRenderTimer) {
-		clearTimeout(sessionRenderTimer);
-		sessionRenderTimer = null;
-	}
-	toolMouseInputUnsubscribe?.();
-	toolMouseInputUnsubscribe = null;
-	hoveredToolCallId = null;
-	setHoveredToolGroup(null);
-	setHoveredToolIo(null, null);
-	try {
-		if (!nextFixedEditorFeatures) {
-			toolMouseTui?.terminal?.write?.(TOOL_MOUSE_DISABLE);
-		}
-	} catch {
-		// The terminal may already be closed during shutdown.
-	}
-	try {
-		toolMouseUi?.setWidget?.(TOOL_MOUSE_WIDGET_KEY, undefined);
-	} catch {
-		// The UI context may already have been reset during /reload.
-	}
-	restoreToolMouseInputCapture();
-	restoreToolMouseRenderPatch();
-	scrollButtonVisible = false;
-	scrollButtonHovered = false;
-	scrollButtonWidget = null;
-	pendingScrollMessages = 0;
-	assistantMessageActive = false;
-	scrollButtonSyncScheduled = false;
-	toolMouseTui = null;
-	toolMouseUi = null;
-	toolMouseFixedFeaturesEnabled = false;
-	collapseCompensationRemainder = 0;
-}
-
-export function installToolMouseInteraction(ctx: any): void {
-	teardownToolMouseInteraction(false);
-	if (ctx?.mode !== "tui" || !ctx?.hasUI) return;
-	if (typeof ctx.ui?.onTerminalInput !== "function" || typeof ctx.ui?.setWidget !== "function")
-		return;
-
-	toolMouseUi = ctx.ui;
-	toolMouseFixedFeaturesEnabled = false;
-	ctx.ui.setWidget(TOOL_MOUSE_WIDGET_KEY, (tui: any, theme: any) => {
-		toolMouseTui = tui;
-		// Fixed editor is not supported in pi-zero; root input capture is native.
-		patchToolMouseMotionAfterRender(tui);
-		if (toolMouseInteractionActive())
-			tui?.terminal?.write?.(TOOL_MOUSE_MOTION_ENABLE);
-		const widget = {
-			render: (width: number) => renderScrollButton(width, theme),
-			invalidate() {},
-		};
-		scrollButtonWidget = widget;
-		return widget;
-	});
-	toolMouseInputUnsubscribe = ctx.ui.onTerminalInput(handleToolMouseInput);
-}
-
-function refreshToolRendererComponents(tui: any): void {
-	const tools: any[] = [];
-	collectToolComponents(tui, tools);
-	for (const tool of tools) tool.invalidate?.();
-}
-
-function scheduleSessionRender(refresh?: () => void): void {
-	const tui = toolMouseTui;
-	if (!tui || typeof tui.requestRender !== "function") return;
-	if (sessionRenderTimer) clearTimeout(sessionRenderTimer);
-	// Restored transcripts are populated at different points for startup, reload,
-	// and session replacement. Repaint after session_start and the surrounding UI
-	// rebuild finish so messages are not left hidden until the next terminal input.
-	sessionRenderTimer = setTimeout(() => {
-		sessionRenderTimer = null;
-		if (toolMouseTui !== tui) return;
-		// Do not pre-wrap while fixed-editor compositor install is still pending.
-		if (!toolMouseFixedFeaturesEnabled || useFixedEditorFeatures(tui)) {
-			patchToolMouseMotionAfterRender(tui);
-		}
-		refreshToolRendererComponents(tui);
-		refresh?.();
-		tui.requestRender(true);
-	}, 0);
 }
 
 // Bright green for success icon (truecolor ANSI escape)
@@ -1838,7 +896,6 @@ function refreshCurrentTranscript(
 ): void {
 	toolGrouping?.refresh();
 	compactStyle.refresh();
-	toolMouseTui?.requestRender?.(true);
 	ctx?.ui?.requestRender?.(true);
 }
 
@@ -1850,21 +907,6 @@ function applyStyleMode(
 ): void {
 	config.mode = mode;
 	saveConfig();
-	if (mode === "off") {
-		// Native rendering mode: drop hover/click state and fully disable mouse
-		// reporting so the terminal restores its default scrollback wheel scrolling.
-		// (The fixed-editor compositor owns its own reporting when enabled.)
-		hoveredToolCallId = null;
-		setHoveredToolGroup(null);
-		setHoveredToolIo(null, null);
-		scrollButtonVisible = false;
-		scrollButtonHovered = false;
-		pendingScrollMessages = 0;
-		assistantMessageActive = false;
-		if (toolMouseTui && !useFixedEditorFeatures(toolMouseTui)) {
-			toolMouseTui.terminal?.write?.(TOOL_MOUSE_DISABLE);
-		}
-	}
 	refreshCurrentTranscript(compactStyle, ctx, toolGrouping);
 	ctx.ui.notify(`Claude Code style: ${mode}`, "info");
 }
@@ -2275,13 +1317,6 @@ function renderDefault(tool: any, slot: "renderCall" | "renderResult", args: any
 	return new Text(fallback, 0, 0);
 }
 
-function singleLine(text: string) {
-	return {
-		render: (width: number) => [truncateToWidth(text, width, "…")],
-		invalidate() {},
-	};
-}
-
 function insetComponent(component: any): any {
 	return {
 		render: (width: number) =>
@@ -2535,7 +1570,6 @@ function createCcstyleTool(
 			const isError = options?.isError || context?.isError;
 			setToolVisualState(context, isError ? "error" : "success");
 			const expanded = isToolExpanded(options, context);
-			const toolCallId = context?.toolCallId;
 			if (shouldRenderRichDiff(config.mode, toolName, Boolean(isError))) {
 				// Pass getter so Diff indicator / wrap / limits update on the next paint
 				// without recreating the tool result component.
@@ -2545,8 +1579,6 @@ function createCcstyleTool(
 					{
 						...options,
 						expanded,
-						// Live hover state for the collapsed hint row (muted → text on hover).
-						isHovered: () => !!toolCallId && toolCallId === hoveredToolCallId,
 					},
 					theme,
 					context,
@@ -2577,7 +1609,6 @@ function createCcstyleTool(
 						: "Done";
 			const expandable = !expanded && (tasks.length > 0 || hasExpandableDetail(text, args));
 			const hint = expandable ? theme.fg("muted", " • press ctrl-o to expand") : "";
-			const hoveredHint = expandable ? theme.fg("text", " • press ctrl-o to expand") : "";
 			if (expanded) {
 				return renderExpandedToolResult(
 					text || "",
@@ -2591,7 +1622,6 @@ function createCcstyleTool(
 			if (context?.state) context.state.ccstyleIoView = undefined;
 			let cachedWidth: number | undefined;
 			let cachedLine: string | undefined;
-			let cachedHoveredLine: string | undefined;
 			return {
 				render(width: number) {
 					if (cachedLine === undefined || cachedWidth !== width) {
@@ -2600,12 +1630,8 @@ function createCcstyleTool(
 							isError ? "error" : "muted",
 							renderCollapsedToolResultToWidth(rendered, hint, width),
 						);
-						cachedHoveredLine = theme.fg(
-							isError ? "error" : "muted",
-							renderCollapsedToolResultToWidth(rendered, hoveredHint, width),
-						);
 					}
-					return [toolCallId && hoveredToolCallId === toolCallId ? cachedHoveredLine! : cachedLine];
+					return [cachedLine!];
 				},
 				invalidate() {},
 			};
@@ -2943,18 +1969,6 @@ function deactivateLegacyCompactionRendering() {
 	if (patch) patch.enabled = () => false;
 }
 
-function notePendingScrollMessage(role: unknown): void {
-	if (!toolMouseTui || !useFixedEditorFeatures(toolMouseTui) || !scrollButtonVisible) return;
-	if (role === "assistant") {
-		if (assistantMessageActive) return;
-		assistantMessageActive = true;
-	} else if (role !== "toolResult") {
-		return;
-	}
-	pendingScrollMessages += 1;
-	toolMouseTui.requestRender?.();
-}
-
 export default function (
 	pi: ExtensionAPI,
 	configOverride?: Partial<Config>,
@@ -3029,11 +2043,7 @@ export default function (
 		if (!hooks) return;
 		hooks.toolGrouping.setTheme(ctx.ui.theme);
 		hooks.compactStyle.onSessionStart(event, ctx);
-		pendingScrollMessages = 0;
-		assistantMessageActive = false;
 		ctx.ui.setStatus("ccstyle", undefined);
-		installToolMouseInteraction(ctx);
-		scheduleSessionRender(hooks.compactStyle.refresh);
 	});
 
 	pi.on("session_compact", async (event, ctx) => {
@@ -3041,23 +2051,10 @@ export default function (
 		if (!hooks) return;
 		hooks.toolGrouping.setTheme(ctx.ui.theme);
 		hooks.compactStyle.onSessionCompact(event, ctx);
-		// Compaction rebuilds the transcript without session_start. Rebind after
-		// other TUI extensions may have replaced the root input dispatcher.
-		installToolMouseInteraction(ctx);
-		scheduleSessionRender(hooks.compactStyle.refresh);
-	});
-
-	pi.on("message_start", async (event) => {
-		if (installation) notePendingScrollMessage(event?.message?.role);
 	});
 
 	pi.on("message_update", async (event, ctx) => {
 		installation?.compactStyle.onMessageUpdate(event, ctx);
-		if (installation && event?.message?.role === "assistant") notePendingScrollMessage("assistant");
-	});
-
-	pi.on("message_end", async (event) => {
-		if (installation && event?.message?.role === "assistant") assistantMessageActive = false;
 	});
 
 	pi.on("agent_start", async (event, ctx) => {
@@ -3095,7 +2092,6 @@ export default function (
 		)
 			return;
 		current.compactStyle.onSessionShutdown(event, ctx);
-		teardownToolMouseInteraction();
 		deactivateGlobalToolRendering(current.globalToolRendering);
 		current.toolGrouping.shutdown();
 		deactivateLegacyCompactionRendering();
