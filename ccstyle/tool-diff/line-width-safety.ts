@@ -9,6 +9,9 @@ export interface WidthMeasurementOps {
 export interface CollapsedDiffHintOptions {
 	remainingLines: number;
 	hiddenHunks: number;
+	/** When true the view is already expanded; ctrl+o would collapse it back,
+	 * so never advertise "press ctrl-o to expand" in this state. */
+	expanded: boolean;
 }
 
 function guardSafeWidth(width: number): number | undefined {
@@ -70,15 +73,28 @@ export function buildCollapsedDiffHintText(
 				? `${options.hiddenHunks} ${pluralize(options.hiddenHunks, "hunk")}`
 				: undefined;
 
-		const candidates = [
-			`… (${[remainingText, hiddenHunksText, "press ctrl-o to expand"].filter(Boolean).join(" • ")})`,
-			`… (${[remainingText, hiddenHunksText].filter(Boolean).join(" • ")})`,
-			`… (${[shortRemainingText, shortHiddenHunksText].filter(Boolean).join(" • ")})`,
-			options.hiddenHunks > 0
-				? `… (+${options.remainingLines} • +${options.hiddenHunks}h)`
-				: `… (+${options.remainingLines})`,
-			"…",
-		];
+		const candidates =
+			options.expanded
+				? [
+						// Already expanded: ctrl+o toggles back to collapsed, so point the
+						// user at the /ccstyle setting instead of a key that would fold it.
+						`… (${[remainingText, hiddenHunksText, 'raise "Expanded max lines" in /ccstyle'].filter(Boolean).join(" • ")})`,
+						`… (${[remainingText, hiddenHunksText].filter(Boolean).join(" • ")})`,
+						`… (${[shortRemainingText, shortHiddenHunksText].filter(Boolean).join(" • ")})`,
+						options.hiddenHunks > 0
+							? `… (+${options.remainingLines} • +${options.hiddenHunks}h)`
+							: `… (+${options.remainingLines})`,
+						"…",
+				  ]
+				: [
+						`… (${[remainingText, hiddenHunksText, "press ctrl-o to expand"].filter(Boolean).join(" • ")})`,
+						`… (${[remainingText, hiddenHunksText].filter(Boolean).join(" • ")})`,
+						`… (${[shortRemainingText, shortHiddenHunksText].filter(Boolean).join(" • ")})`,
+						options.hiddenHunks > 0
+							? `… (+${options.remainingLines} • +${options.hiddenHunks}h)`
+							: `… (+${options.remainingLines})`,
+						"…",
+				  ];
 
 		for (const candidate of candidates) {
 			if (ops.measure(candidate) <= safeWidth) {

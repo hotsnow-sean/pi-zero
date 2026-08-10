@@ -2312,6 +2312,7 @@ function applyLineLimit(
 		{
 			remainingLines: remaining,
 			hiddenHunks,
+			expanded,
 		},
 		width,
 		DIFF_WIDTH_OPS,

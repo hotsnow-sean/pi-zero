@@ -2,6 +2,20 @@
 
 All notable changes to `@zerosnow/pi-zero` are documented in this file.
 
+## [0.2.1] - 2026-08
+
+### Fixed
+- **Misleading "press ctrl-o to expand" hint on large diffs.** The diff
+  collapse hint was emitted unconditionally whenever a diff had hidden content,
+  even in the expanded state. Since pi's `app.tools.expand` binding (`ctrl+o`)
+  is a binary toggle, pressing it again in the expanded view collapsed the diff
+  instead of revealing more, trapping the user on the `expandedPreviewMaxLines`
+  cap for huge single edits/writes.
+
+  The expanded-state hint no longer advertises `ctrl+o`; it now reads
+  `raise "Expanded max lines" in /ccstyle`, guiding the user to the real knob.
+  Collapsed-state behavior is unchanged.
+
 ## [0.2.0] - 2026-02
 
 ### Fixed
