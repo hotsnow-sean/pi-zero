@@ -21,7 +21,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '22'            # 满足 engines: >=22.19.0
+          # 必须用 node 24（自带 npm 11.x）：npm 10.x 不支持 OIDC 受信发布，
+          # 会因 .npmrc 里的空 _authToken 走错路径导致发布 404。
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       # 纯源码包无 build 步骤：npm publish 仅打包 files 字段，
