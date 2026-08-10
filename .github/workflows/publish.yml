@@ -23,10 +23,9 @@ jobs:
         with:
           node-version: '22'            # 满足 engines: >=22.19.0
           registry-url: 'https://registry.npmjs.org'
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      # 纯源码包无 build 步骤：npm publish 仅打包 files 字段，
+      # 不需要安装依赖，因此不跑 npm ci，也不提交 lockfile。
 
       # 仅 tag 触发时校验版本一致；手动 dispatch（分支触发）时跳过，
       # 避免把分支名当版本号误判失败。
