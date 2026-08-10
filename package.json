@@ -18,6 +18,9 @@
     "vibe"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "index.ts",
     "context/",
