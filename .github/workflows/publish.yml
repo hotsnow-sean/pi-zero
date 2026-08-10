@@ -41,6 +41,9 @@ jobs:
           fi
 
       - name: Publish to npm
-        run: npm publish --provenance
+        # 使用 npm Trusted Publishing（OIDC 受信发布）：不依赖 NODE_AUTH_TOKEN，
+        # 无需在 CI 存储长期 token，发布更安全。需在 npm 侧将 GitHub 仓库
+        # 配置为该包的可信发布方（见 README/发布说明）。
+        run: npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ''
