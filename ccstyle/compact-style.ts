@@ -5,6 +5,33 @@ import { homedir } from "node:os";
 import { sanitizeToolResultText } from "./tool-result-sanitize.ts";
 
 /**
+ * Apply Pi's markdown transformers (e.g. the built-in mermaid renderer) to a
+ * piece of assistant text. Mirrors Pi's internal createMarkdownTransform so
+ * the compact assistant renderer keeps mermaid / custom code blocks working.
+ */
+function applyMarkdownTransformers(
+	text: string,
+	transformers: readonly any[],
+	isStreaming: boolean,
+	availableWidth: number,
+): string {
+	let out = text;
+	for (const transformer of transformers) {
+		try {
+			const result = transformer(out, {
+				messageType: "assistant",
+				isStreaming,
+				availableWidth,
+			});
+			if (typeof result === "string") out = result;
+		} catch {
+			// Keep the current markdown and continue with the next transformer.
+		}
+	}
+	return out;
+}
+
+/**
  * Compact transcript rendering is adapted from pi-compact-transcript v0.6.2
  * (MIT, Alan Hagedorn). This module is internal so claude-code-style.ts remains
  * the package's only extension entry point.
@@ -964,7 +991,10 @@ function patchAssistantMessageComponent(
 			this.contentContainer.addChild(new Spacer(1));
 			for (const content of texts) {
 				this.contentContainer.addChild(
-					new Markdown(content.text.trim(), this.outputPad, 0, this.markdownTheme),
+					new Markdown(content.text.trim(), this.outputPad, 0, this.markdownTheme, undefined, {
+						transform: (markdown: string, availableWidth: number) =>
+							applyMarkdownTransformers(markdown, this.markdownTransformers, this.isStreaming, availableWidth),
+					}),
 				);
 			}
 		}

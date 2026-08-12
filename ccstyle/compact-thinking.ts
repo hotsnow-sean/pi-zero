@@ -101,16 +101,53 @@ function loadPatchedUpstream(): {
     finishThinking();
   });`;
 
+	// Pi renders mermaid / custom code blocks by passing a markdown `transform`
+	// to the Markdown component. The upstream compact-thinking renderer drops it
+	// (new Markdown(text, pad, 0, theme)), so mermaid shows as raw source. Restore
+	// the transformer chain when this patch rerenders assistant text while
+	// thinking is hidden.
+	const textRenderOriginal = `      if (content.type === "text" && content.text.trim()) {
+        self.contentContainer.addChild(
+          new Markdown(content.text.trim(), self.outputPad, 0, self.markdownTheme),
+        );
+        continue;
+      }`;
+	const textRenderPatched = `      if (content.type === "text" && content.text.trim()) {
+        self.contentContainer.addChild(
+          new Markdown(content.text.trim(), self.outputPad, 0, self.markdownTheme, undefined, {
+            transform: (markdown: string, availableWidth: number) => {
+              let out = markdown;
+              for (const transformer of self.markdownTransformers ?? []) {
+                try {
+                  const result = transformer(out, {
+                    messageType: "assistant",
+                    isStreaming: self.isStreaming,
+                    availableWidth,
+                  });
+                  if (typeof result === "string") out = result;
+                } catch {
+                  // Keep current markdown and continue with the next transformer.
+                }
+              }
+              return out;
+            },
+          }),
+        );
+        continue;
+      }`;
+
 	let upstreamIndexSource = readFileSync(upstreamIndexPath, "utf8");
 	if (
 		upstreamIndexSource.includes(toolStartOriginal) &&
 		upstreamIndexSource.includes(updateBoundaryOriginal) &&
-		upstreamIndexSource.includes(messageEndOriginal)
+		upstreamIndexSource.includes(messageEndOriginal) &&
+		upstreamIndexSource.includes(textRenderOriginal)
 	) {
 		upstreamIndexSource = upstreamIndexSource
 			.replace(toolStartOriginal, toolStartPatched)
 			.replace(updateBoundaryOriginal, updateBoundaryPatched)
-			.replace(messageEndOriginal, messageEndPatched);
+			.replace(messageEndOriginal, messageEndPatched)
+			.replace(textRenderOriginal, textRenderPatched);
 	}
 
 	// Reuse Pi's live modules so the upstream prototype patch reaches runtime components.

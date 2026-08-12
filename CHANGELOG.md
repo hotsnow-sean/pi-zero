@@ -2,6 +2,18 @@
 
 All notable changes to `@zerosnow/pi-zero` are documented in this file.
 
+## [0.2.2] - 2026-08
+
+### Fixed
+- **Mermaid / custom code blocks rendered as raw source when thinking is hidden.**
+  The compact assistant renderer (compact-style) and the compact-thinking fork
+  re-created Pi's `Markdown` component without the `transform` option that applies
+  Pi's markdown transformers (e.g. the built-in mermaid renderer). With
+  `hideThinkingBlock` enabled, ` ```mermaid ` blocks showed as raw source instead
+  of terminal box-drawing art. Both renderers now apply the transformer chain
+  (mirroring Pi's internal `createMarkdownTransform`), restoring mermaid and any
+  custom transformer rendering.
+
 ## [0.2.1] - 2026-08
 
 ### Fixed
