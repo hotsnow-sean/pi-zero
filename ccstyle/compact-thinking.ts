@@ -149,6 +149,57 @@ function loadPatchedUpstream(): {
 			.replace(messageEndOriginal, messageEndPatched)
 			.replace(textRenderOriginal, textRenderPatched);
 	}
+	// The upstream StrictThinkingPreview re-wraps the FULL thinking text on every
+	// render. Pi re-renders every visible assistant message on each keystroke, so
+	// in a long session the O(n) wrap of large completed thinking blocks happens
+	// dozens of times per keypress — the dominant source of TUI lag. Replace it
+	// with a bounded, content-keyed cache so unchanged previews are O(1).
+	const previewImportOriginal = `import {
+  formatThoughtDuration,
+  StrictThinkingPreview,
+} from "./lib/preview.ts";`;
+	const previewImportCached = [
+		'import {',
+		'  formatThoughtDuration,',
+		'  getThinkingToggleHint,',
+		'} from "./lib/preview.ts";',
+		'',
+		'const __ctPreviewCache = new Map();',
+		'class StrictThinkingPreview {',
+		'  private text: string;',
+		'  private padding: number;',
+		'  private style: (text: string) => string;',
+		'  constructor(text: string, padding: number, style: (text: string) => string) {',
+		'    this.text = text;',
+		'    this.padding = padding;',
+		'    this.style = style;',
+		'  }',
+		'  render(width: number) {',
+		'    const cached = __ctPreviewCache.get(this.text);',
+		'    // Cache is keyed on content + width + previewLines so a live config change',
+		'    // (e.g. /ccstyle panel) never serves a stale preview. Return a copy so a',
+		'    // downstream in-place mutation of the returned lines cannot corrupt the cache.',
+		'    if (cached && cached.width === width && cached.previewLines === config.previewLines) return [...cached.lines];',
+		'    const lines = new Text(this.style(this.text), this.padding, 0).render(width);',
+		'    let out: string[];',
+		'    if (lines.length <= config.previewLines) {',
+		'      out = lines;',
+		'    } else {',
+		'      const hiddenLines = lines.length - config.previewLines;',
+		'      const noun = hiddenLines === 1 ? "line" : "lines";',
+		'      const toggleHint = getThinkingToggleHint();',
+		'      const hint = "... (" + hiddenLines + " more " + noun + (toggleHint ? ", " + toggleHint : "") + ")";',
+		'      const hintLines = new Text(this.style(hint), this.padding, 0).render(width);',
+		'      out = [...hintLines, ...lines.slice(-config.previewLines)];',
+		'    }',
+		'    if (__ctPreviewCache.size > 400) __ctPreviewCache.clear();',
+		'    __ctPreviewCache.set(this.text, { width, previewLines: config.previewLines, lines: out });',
+		'    return out;',
+		'  }',
+		'  invalidate() {}',
+		'}',
+	].join("\n");
+	upstreamIndexSource = upstreamIndexSource.replace(previewImportOriginal, previewImportCached);
 
 	// Reuse Pi's live modules so the upstream prototype patch reaches runtime components.
 	const jiti = createJiti(import.meta.url, {

@@ -63,6 +63,7 @@ pi-zero/
 ## Compatibility & Notes
 
 - `ccstyle` patches pi's tool rendering (similar to fixed-editor); if you ever see layout issues, run `/ccstyle off` to fall back to native rendering.
+- **Long-session responsiveness.** `compact-thinking`'s thinking preview is cached by content, so typing and deletion stay responsive even in very long sessions with many large thinking blocks.
 - Fixed editor is **not** included, and the fixed-editor-only tool-mouse interaction (hover/click/scroll affordances) has been removed.
 - Multiple pi processes are isolated: state is process-local (global symbols), and session boundaries are cleaned on `session_start`.
 

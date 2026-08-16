@@ -2,6 +2,20 @@
 
 All notable changes to `@zerosnow/pi-zero` are documented in this file.
 
+## [0.2.3] - 2026-08
+
+### Fixed
+- **Severe TUI lag in long sessions.** The compact-thinking fork's thinking
+  preview (`StrictThinkingPreview`) re-wrapped the entire thinking text on every
+  render. Because pi re-renders every visible assistant message on each
+  keystroke, in a long session (many large thinking blocks) that O(n) wrap ran
+  dozens of times per keypress, causing ~400ms+ typing and deletion lag.
+
+  The preview is now cached by content (`text` + `width` + `previewLines`),
+  making unchanged previews O(1) and restoring near-instant keystroke
+  responsiveness. The cache is bounded (evicts past 400 entries) and returns a
+  defensive copy, so a downstream in-place mutation cannot corrupt it.
+
 ## [0.2.2] - 2026-08
 
 ### Fixed
