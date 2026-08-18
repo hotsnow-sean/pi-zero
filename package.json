@@ -1,6 +1,6 @@
 {
   "name": "@zerosnow/pi-zero",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Curated pi extension suite: powerline status bar + random vibe + token/elapsed-time stats, /context, and ccstyle tool rendering",
   "type": "module",
   "author": "hotsnow (zerosnow)",
