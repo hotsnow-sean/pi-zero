@@ -26,8 +26,16 @@ jobs:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      # 纯源码包无 build 步骤：npm publish 仅打包 files 字段，
-      # 不需要安装依赖，因此不跑 npm ci，也不提交 lockfile。
+      # 必须安装依赖：npm 打包 bundledDependencies 时需要把依赖打进 tarball，
+      # 而打包时该依赖必须已存在于本地 node_modules。若不安装，bundled 依赖
+      # 会为空，安装本包后 require.resolve 找不到它。
+      # 用 npm install（而非 npm ci），避免依赖已提交的 lockfile；ci 不提交任何文件。
+      # 只装 bundled 需要的依赖：--omit=optional 跳过 @shikijs/cli 等无关大包，
+      # --omit=dev 跳过开发依赖。
+      # 显式指定 --registry，避免被任何环境 .npmrc / lockfile 导向镜像源；
+      # 仓库未提交 lockfile 与 .npmrc，本步骤固定走官方 npm registry。
+      - name: Install dependencies (for bundledDependencies)
+        run: npm install --omit=optional --omit=dev --registry=https://registry.npmjs.org
 
       # 仅 tag 触发时校验版本一致；手动 dispatch（分支触发）时跳过，
       # 避免把分支名当版本号误判失败。
