@@ -470,6 +470,18 @@ export default function piZero(pi: ExtensionAPI): void {
     }
   });
 
+  pi.on("thinking_level_select", async (event, ctx) => {
+    if (typeof event?.level === "string") {
+      // The session_start snapshot is stale after switching thinking levels;
+      // adopt the freshly selected level so the powerline segment stays in sync
+      // without a reload.
+      currentThinkingLevel = event.level;
+      if (ctx) currentCtx = ctx;
+      resetLayoutCache();
+      requestImmediateStatusRender();
+    }
+  });
+
   pi.on("session_shutdown", async () => {
     sessionGeneration++;
     statusRenderScheduler.cancel();
