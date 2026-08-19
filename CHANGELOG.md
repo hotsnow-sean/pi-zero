@@ -2,6 +2,17 @@
 
 All notable changes to `@zerosnow/pi-zero` are documented in this file.
 
+## [0.2.5] - 2026-08
+
+### Fixed
+- **Powerline thinking segment stayed stale after switching thinking levels.**
+  The `thinking` segment (and the `think:<level>` text on the `model` segment)
+  snapshotted the thinking level once at `session_start` and never refreshed,
+  so cycling levels with `Shift+Tab` left the status bar showing the previous
+  level until a full reload. The extension now subscribes to pi's
+  `thinking_level_select` event, adopts the freshly selected level, invalidates
+  the layout cache, and requests an immediate repaint.
+
 ## [0.2.3] - 2026-08
 
 ### Fixed
